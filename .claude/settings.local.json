@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:epl-predictor-2627.netlify.app)",
+      "PowerShell(git init)",
+      "PowerShell(git add -A)",
+      "PowerShell(git -c user.email=\"chriscay2010@gmail.com\" -c user.name=\"Chris\" commit -m \"Baseline: initial import of EPL Predictor project files\")",
+      "PowerShell(git branch -M main)",
+      "PowerShell(git remote add origin https://github.com/EPLPredictor/EPLPredictor2627.git)",
+      "PowerShell(Get-Command git -ErrorAction SilentlyContinue)"
+    ]
+  }
+}

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redfooty EPL Predictor — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --maroon:#7C1632;
+    --maroon-deep:#54101F;
+    --crimson:#C41E3A;
+    --teal:#12A594;
+    --ink:#0E0F12;
+    --paper:#FFFFFF;
+    --panel:#15171B;
+    --panel-2:#1C1F24;
+    --line:rgba(255,255,255,.10);
+    --line-dark:rgba(0,0,0,.10);
+    --muted:#9AA0A6;
+    --gold:#D8A93C;
+    --silver:#B9C0C6;
+    --bronze:#C17A4E;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:'Inter',sans-serif;
+    background:var(--paper);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3,.display{
+    font-family:'Anton',sans-serif;
+    font-weight:400;
+    letter-spacing:.5px;
+    text-transform:uppercase;
+    line-height:1.02;
+  }
+  .eyebrow{
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:2px;
+    text-transform:uppercase;
+    color:var(--teal);
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px;}
+  a{color:inherit;text-decoration:none;}
+
+  /* ---- NAV ---- */
+  nav{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:18px 28px;border-bottom:1px solid var(--line-dark);
+    max-width:1080px;margin:0 auto;
+  }
+  .logo{display:flex;align-items:center;gap:10px;font-family:'Anton';font-size:20px;letter-spacing:.5px;}
+  .logo-badge{
+    width:36px;height:36px;border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, var(--maroon) 0%, var(--maroon-deep) 70%);
+    display:flex;align-items:center;justify-content:center;
+    color:#F2D9A8;font-size:15px;border:2px solid #F2D9A8;
+  }
+  .navlinks{display:flex;gap:28px;font-size:13px;font-weight:600;letter-spacing:.3px;color:#3a3d42;}
+  .cta-pill{
+    background:var(--crimson);color:#fff;padding:11px 22px;border-radius:999px;
+    font-size:13px;font-weight:700;letter-spacing:.3px;
+  }
+
+  /* ---- HERO ---- */
+  .hero{
+    background:var(--ink);
+    color:#fff;
+    padding:72px 0 56px;
+    position:relative;
+    overflow:hidden;
+  }
+  .hero::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 85% 20%, rgba(124,22,50,.55), transparent 45%),
+      radial-gradient(circle at 10% 90%, rgba(18,165,148,.18), transparent 40%);
+  }
+  .hero-inner{position:relative;text-align:center;}
+  .season-tag{
+    display:inline-flex;align-items:center;gap:8px;
+    border:1px solid rgba(255,255,255,.25);border-radius:999px;
+    padding:7px 16px;font-size:12px;font-weight:600;letter-spacing:1.5px;
+    color:#D8D9DC;margin-bottom:22px;
+  }
+  .season-tag .dot{width:6px;height:6px;border-radius:50%;background:var(--teal);}
+  .hero h1{font-size:clamp(40px,7vw,74px);}
+  .hero h1 .accent{color:var(--crimson);}
+  .hero p.sub{
+    max-width:520px;margin:20px auto 34px;
+    color:#B9BCC2;font-size:16px;line-height:1.6;font-weight:500;
+  }
+  .hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+  .btn-primary{
+    background:var(--crimson);color:#fff;padding:15px 30px;border-radius:999px;
+    font-weight:700;font-size:14px;letter-spacing:.3px;border:none;
+  }
+  .btn-ghost{
+    background:transparent;color:#fff;padding:15px 30px;border-radius:999px;
+    font-weight:700;font-size:14px;letter-spacing:.3px;border:1px solid rgba(255,255,255,.3);
+  }
+  .countdown{
+    margin-top:44px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap;
+  }
+  .cd-box{
+    background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);
+    border-radius:10px;padding:12px 16px;min-width:74px;text-align:center;
+  }
+  .cd-box .num{font-family:'Anton';font-size:26px;color:#fff;}
+  .cd-box .lbl{font-size:10px;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-top:2px;}
+
+  /* ---- PRIZES ---- */
+  .prizes{padding:64px 0;background:#fff;}
+  .section-head{text-align:center;margin-bottom:42px;}
+  .section-head h2{font-size:clamp(28px,4vw,42px);margin-top:10px;}
+  .prize-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+  .prize-card{
+    border:1px solid #ECE7E4;border-radius:16px;padding:30px 24px;text-align:center;
+    position:relative;
+  }
+  .prize-card.win1{border-color:var(--gold);background:linear-gradient(180deg,#FFF9EC,#fff 60%);}
+  .prize-rank{
+    font-family:'Anton';font-size:13px;letter-spacing:1px;
+    display:inline-block;padding:5px 12px;border-radius:999px;margin-bottom:16px;
+  }
+  .win1 .prize-rank{background:var(--gold);color:#3a2a04;}
+  .win2 .prize-rank{background:var(--silver);color:#20242a;}
+  .win3 .prize-rank{background:var(--bronze);color:#2e1607;}
+  .prize-card h3{font-size:22px;margin-bottom:8px;}
+  .prize-card p{font-size:13.5px;color:#6b6f75;line-height:1.5;}
+
+  /* ---- HOW IT WORKS ---- */
+  .how{padding:64px 0;background:#F7F5F3;}
+  .how-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px;}
+  .how-step{padding:0 8px;}
+  .how-num{font-family:'Anton';font-size:44px;color:var(--maroon);opacity:.35;}
+  .how-step h3{font-size:19px;margin:8px 0 8px;text-transform:none;font-family:'Inter';font-weight:800;}
+  .how-step p{font-size:13.5px;color:#6b6f75;line-height:1.6;}
+
+  /* ---- ELIGIBILITY STRIP ---- */
+  .strip{
+    background:var(--maroon);color:#fff;padding:26px 0;text-align:center;
+  }
+  .strip .wrap{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap;}
+  .strip strong{font-family:'Anton';font-size:15px;letter-spacing:.4px;}
+  .strip span{font-size:13.5px;color:#F0D9DE;}
+
+  /* ---- LEADERBOARD ---- */
+  .board-section{padding:70px 0 90px;background:var(--ink);}
+  .board-head{text-align:center;color:#fff;margin-bottom:34px;}
+  .board-head h2{font-size:clamp(26px,4vw,38px);}
+  .board-head p{color:var(--muted);font-size:13.5px;margin-top:10px;}
+  .board-tabs{display:flex;justify-content:center;gap:8px;margin:26px auto 34px;background:var(--panel);width:fit-content;padding:6px;border-radius:12px;}
+  .board-tabs span{
+    padding:9px 18px;border-radius:8px;font-size:13px;font-weight:700;color:var(--muted);
+  }
+  .board-tabs span.active{background:var(--teal);color:#06201d;}
+  .board-card{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    overflow:hidden;max-width:820px;margin:0 auto;
+  }
+  .board-row{
+    display:grid;
+    grid-template-columns:50px 1fr 70px 70px 130px 90px;
+    align-items:center;
+    padding:16px 20px;border-bottom:1px solid var(--line);
+    color:#fff;gap:8px;
+  }
+  .board-row.header{
+    color:var(--muted);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;font-weight:700;
+    padding:14px 20px;border-bottom:1px solid var(--line);
+  }
+  .board-row:last-child{border-bottom:none;}
+  .rank{font-family:'Anton';font-size:16px;color:var(--muted);}
+  .rank.r1{color:var(--gold);}
+  .rank.r2{color:var(--silver);}
+  .rank.r3{color:var(--bronze);}
+  .player{display:flex;align-items:center;gap:12px;}
+  .avatar{
+    width:34px;height:34px;border-radius:50%;
+    background:linear-gradient(135deg,var(--maroon),var(--maroon-deep));
+    display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;
+    flex-shrink:0;
+  }
+  .player-name{font-size:14px;font-weight:700;}
+  .player-tag{font-size:11px;color:var(--muted);margin-top:2px;}
+  .pts{font-family:'Anton';font-size:17px;}
+  .pill-num{font-size:13px;color:#D8D9DC;font-weight:600;text-align:center;}
+  .gw-track{display:flex;align-items:center;gap:8px;}
+  .ring{
+    width:30px;height:30px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:9px;font-weight:800;color:#fff;flex-shrink:0;
+  }
+  .gw-text{font-size:11px;color:var(--muted);}
+  .form{display:flex;gap:4px;}
+  .fchip{width:18px;height:18px;border-radius:5px;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;color:#fff;}
+  .fW{background:var(--teal);} .fD{background:#5B5F66;} .fL{background:var(--crimson);}
+  .legend{max-width:820px;margin:16px auto 0;color:var(--muted);font-size:11.5px;text-align:right;padding-right:4px;}
+
+  /* ---- FOOTER ---- */
+  footer{background:#000;color:#8b8f95;padding:36px 0;font-size:12.5px;}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+
+  @media(max-width:760px){
+    .prize-grid,.how-grid{grid-template-columns:1fr;}
+    .navlinks{display:none;}
+    .board-row{grid-template-columns:34px 1fr 50px;}
+    .board-row .colhide{display:none;}
+  }
+</style>
+</head>
+<body>
+
+  <nav>
+    <div class="logo"><div class="logo-badge">R</div>REDFOOTY <span style="color:var(--crimson)">·</span> PREDICTOR</div>
+    <div class="navlinks"><span>Prizes</span><span>How It Works</span><span>Rules</span><span>Leaderboard</span></div>
+    <a class="cta-pill" href="#">Register to Predict</a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap hero-inner">
+      <div class="season-tag"><span class="dot"></span> PREMIER LEAGUE 2026/27 · GAMEWEEK 1 — AUG 22</div>
+      <h1>38 GAMEWEEKS.<br><span class="accent">ONE WINNER'S TABLE.</span></h1>
+      <p class="sub">Predict every Premier League matchday alongside fellow Indian Reds. Track your rank all season and finish top 3 to win.</p>
+      <div class="hero-ctas">
+        <a class="btn-primary" href="#">Register to Predict</a>
+        <a class="btn-ghost" href="#">Read Full Rules</a>
+      </div>
+      <div class="countdown">
+        <div class="cd-box"><div class="num">18</div><div class="lbl">Days</div></div>
+        <div class="cd-box"><div class="num">06</div><div class="lbl">Hours</div></div>
+        <div class="cd-box"><div class="num">42</div><div class="lbl">Mins</div></div>
+        <div class="cd-box"><div class="num">3</div><div class="lbl">Wks Open</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PRIZES -->
+  <section class="prizes">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">The Prize Pool</div>
+        <h2>Play All Season. Win Big.</h2>
+      </div>
+      <div class="prize-grid">
+        <div class="prize-card win1">
+          <div class="prize-rank">1ST PLACE</div>
+          <h3>Jersey of Your Choice + Dinner for Two</h3>
+          <p>An original club jersey, any player, any season — plus dinner for two on Redfooty.</p>
+        </div>
+        <div class="prize-card win2">
+          <div class="prize-rank">2ND PLACE</div>
+          <h3>₹5,000 + Dinner for Two</h3>
+          <p>Cash prize plus a dinner for two, on Redfooty.</p>
+        </div>
+        <div class="prize-card win3">
+          <div class="prize-rank">3RD PLACE</div>
+          <h3>₹5,000 Cash</h3>
+          <p>Straight cash prize, transferred within a week of the season finale.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW IT WORKS -->
+  <section class="how">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="eyebrow">Three Steps</div>
+        <h2 style="font-family:'Inter';font-weight:800;text-transform:none;font-size:32px;">How It Works</h2>
+      </div>
+      <div class="how-grid">
+        <div class="how-step">
+          <div class="how-num">01</div>
+          <h3>Register once</h3>
+          <p>Sign up with your name, email and phone. We verify both with a one-time code, then you set your own login.</p>
+        </div>
+        <div class="how-step">
+          <div class="how-num">02</div>
+          <h3>Predict each gameweek</h3>
+          <p>Pick Win / Draw / Win for every fixture before it locks at kickoff. Correct results score 5, correct draws score 6.</p>
+        </div>
+        <div class="how-step">
+          <div class="how-num">03</div>
+          <h3>Climb the table</h3>
+          <p>Points add up across all 38 gameweeks. Predict at least 75% of gameweeks to stay eligible for prizes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ELIGIBILITY STRIP -->
+  <div class="strip">
+    <div class="wrap">
+      <strong>ELIGIBILITY —</strong>
+      <span>Predict at least 29 of 38 gameweeks (75%) to qualify for prizes. Full rules cover ties, deadlines & disputes.</span>
+    </div>
+  </div>
+
+  <!-- LEADERBOARD WIREFRAME -->
+  <section class="board-section">
+    <div class="wrap">
+      <div class="board-head">
+        <div class="eyebrow" style="color:var(--teal)">Live Standings</div>
+        <h2>The Table</h2>
+        <p>Updated after every gameweek's final whistle.</p>
+      </div>
+
+      <div class="board-tabs">
+        <span class="active">Overall</span>
+        <span>This Gameweek</span>
+        <span>Eligible Only</span>
+      </div>
+
+      <div class="board-card">
+        <div class="board-row header">
+          <div>#</div>
+          <div>Player</div>
+          <div class="colhide">Pts</div>
+          <div class="colhide">Draws</div>
+          <div class="colhide">Gameweeks</div>
+          <div class="colhide">Form</div>
+        </div>
+
+        <div class="board-row">
+          <div class="rank r1">1</div>
+          <div class="player"><div class="avatar">AK</div><div><div class="player-name">Arjun K.</div><div class="player-tag">Mumbai</div></div></div>
+          <div class="pts colhide">184</div>
+          <div class="pill-num colhide">9</div>
+          <div class="gw-track colhide"><div class="ring" style="background:conic-gradient(var(--teal) 92%, #33373d 0)">33/36</div><div class="gw-text">92%</div></div>
+          <div class="form colhide"><div class="fchip fW">W</div><div class="fchip fW">W</div><div class="fchip fD">D</div><div class="fchip fW">W</div><div class="fchip fL">L</div></div>
+        </div>
+
+        <div class="board-row">
+          <div class="rank r2">2</div>
+          <div class="player"><div class="avatar">SN</div><div><div class="player-name">Sneha N.</div><div class="player-tag">Bengaluru</div></div></div>
+          <div class="pts colhide">179</div>
+          <div class="pill-num colhide">11</div>
+          <div class="gw-track colhide"><div class="ring" style="background:conic-gradient(var(--teal) 100%, #33373d 0)">36/36</div><div class="gw-text">100%</div></div>
+          <div class="form colhide"><div class="fchip fW">W</div><div class="fchip fD">D</div><div class="fchip fW">W</div><div class="fchip fW">W</div><div class="fchip fW">W</div></div>
+        </div>
+
+        <div class="board-row">
+          <div class="rank r3">3</div>
+          <div class="player"><div class="avatar">RD</div><div><div class="player-name">Rahul D.</div><div class="player-tag">Kochi</div></div></div>
+          <div class="pts colhide">171</div>
+          <div class="pill-num colhide">8</div>
+          <div class="gw-track colhide"><div class="ring" style="background:conic-gradient(var(--teal) 86%, #33373d 0)">31/36</div><div class="gw-text">86%</div></div>
+          <div class="form colhide"><div class="fchip fL">L</div><div class="fchip fW">W</div><div class="fchip fW">W</div><div class="fchip fD">D</div><div class="fchip fW">W</div></div>
+        </div>
+
+        <div class="board-row">
+          <div class="rank">4</div>
+          <div class="player"><div class="avatar">PM</div><div><div class="player-name">Priya M.</div><div class="player-tag">Delhi</div></div></div>
+          <div class="pts colhide">164</div>
+          <div class="pill-num colhide">7</div>
+          <div class="gw-track colhide"><div class="ring" style="background:conic-gradient(#D8A93C 61%, #33373d 0)">22/36</div><div class="gw-text">61%</div></div>
+          <div class="form colhide"><div class="fchip fW">W</div><div class="fchip fL">L</div><div class="fchip fW">W</div><div class="fchip fW">W</div><div class="fchip fD">D</div></div>
+        </div>
+
+        <div class="board-row">
+          <div class="rank">5</div>
+          <div class="player"><div class="avatar">VJ</div><div><div class="player-name">Vikram J.</div><div class="player-tag">Pune</div></div></div>
+          <div class="pts colhide">158</div>
+          <div class="pill-num colhide">6</div>
+          <div class="gw-track colhide"><div class="ring" style="background:conic-gradient(var(--crimson) 47%, #33373d 0)">17/36</div><div class="gw-text">47% ⚠</div></div>
+          <div class="form colhide"><div class="fchip fD">D</div><div class="fchip fL">L</div><div class="fchip fW">W</div><div class="fchip fL">L</div><div class="fchip fW">W</div></div>
+        </div>
+      </div>
+      <div class="legend">Gameweek ring below 75% (amber/red) flags players currently outside prize eligibility.</div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <div>© 2026 Redfooty India · EPL Predictor</div>
+      <div>All names, avatars and scores above are placeholder data for design purposes only.</div>
+    </div>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>Redfooty EPL Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#08120d;color:#f1f5f9;font-family:'Inter',system-ui,sans-serif;min-height:100vh;padding-bottom:40px;font-size:15px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.spin{animation:spin .7s linear infinite;display:inline-block}
+#app{max-width:480px;margin:0 auto}
+
+.header{
+  background:
+    linear-gradient(180deg, rgba(6,12,9,.45), rgba(6,12,9,.94) 75%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 480 160'%3E%3Cdefs%3E%3ClinearGradient id='beam' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%2322c55e' stop-opacity='.35'/%3E%3Cstop offset='1' stop-color='%2322c55e' stop-opacity='0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpolygon points='55,10 15,150 95,150' fill='url(%23beam)'/%3E%3Cpolygon points='425,10 385,150 465,150' fill='url(%23beam)'/%3E%3Crect x='50' y='8' width='10' height='95' fill='%2314532d'/%3E%3Crect x='30' y='0' width='50' height='14' rx='2' fill='%2314532d'/%3E%3Crect x='420' y='8' width='10' height='95' fill='%2314532d'/%3E%3Crect x='400' y='0' width='50' height='14' rx='2' fill='%2314532d'/%3E%3C/svg%3E") no-repeat top center / cover,
+    #0b1712;
+  border-bottom:1px solid #1c3326;padding:14px 16px 10px;position:sticky;top:0;z-index:50
+}
+.header-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.brand-row{display:flex;align-items:center;gap:9px}
+.brand-mark{width:34px;height:34px;border-radius:9px;object-fit:cover;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+.logo{font-size:17px;font-weight:800;letter-spacing:-.3px;line-height:1.15}
+.logo em{color:#ef4444;font-style:normal}
+.logo-sub{font-size:10px;color:#64748b;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.user-pill{font-size:12px;color:#94a3b8;margin-top:3px}
+.nav{display:flex;gap:4px;background:#101d15;border-radius:12px;padding:4px;margin-top:12px}
+.nav-btn{flex:1;padding:8px 0;border-radius:9px;border:none;cursor:pointer;font-size:13px;font-weight:600;background:transparent;color:#64748b;font-family:inherit;transition:all .18s}
+.nav-btn.active{background:#22c55e;color:#fff}
+
+.section{padding:14px 14px 0}
+.card{background:#101d15;border:1px solid #1c3326;border-radius:16px;padding:16px;margin-bottom:11px;animation:fadein .2s ease}
+.card-live{background:#130b0b;border:1px solid rgba(239,68,68,.4);border-radius:16px;padding:16px;margin-bottom:11px;animation:fadein .2s ease}
+
+.badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.b-live{background:rgba(239,68,68,.15);color:#ef4444}
+.b-done{background:rgba(16,185,129,.15);color:#10b981}
+.b-soon{background:rgba(245,158,11,.15);color:#f59e0b}
+.b-off{background:rgba(100,116,139,.15);color:#94a3b8}
+.b-p10{background:rgba(16,185,129,.18);color:#10b981}
+.b-p5{background:rgba(34,197,94,.18);color:#4ade80}
+.b-p2{background:rgba(245,158,11,.18);color:#f59e0b}
+.b-p0{background:rgba(100,116,139,.15);color:#94a3b8}
+.live-dot{width:7px;height:7px;border-radius:50%;background:#ef4444;display:inline-block;animation:pulse 1s infinite;flex-shrink:0}
+
+.match-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:8px}
+.match-time{font-size:12px;color:#64748b}
+.teams-row{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.team{display:flex;flex-direction:column;align-items:center;gap:6px;width:38%}
+.team img{width:30px;height:30px;object-fit:contain}
+.team-name{font-size:13px;font-weight:600;text-align:center;line-height:1.25}
+.vs{font-size:12px;color:#475569;font-weight:600}
+.score{font-size:26px;font-weight:800;letter-spacing:-1px}
+
+.pred-row{display:flex;align-items:center;gap:8px;margin-top:14px}
+.pick-btn{flex:1;background:transparent;border:1.5px solid #1c3326;border-radius:10px;padding:9px 4px;cursor:pointer;font-family:inherit;color:#94a3b8;text-align:center;transition:all .15s}
+.pick-btn:disabled{opacity:.5;cursor:default}
+.pick-label{font-size:12px;font-weight:700;line-height:1.25}
+.pick-pts{font-size:10px;margin-top:3px;opacity:.75;font-weight:600}
+.pick-active-blue{border-color:#22c55e;color:#4ade80;background:rgba(34,197,94,.08)}
+.pick-active-amber{border-color:#f59e0b;color:#f59e0b;background:rgba(245,158,11,.08)}
+.pred-row input{width:100%;background:#08120d;border:1px solid #1c3326;color:#f1f5f9;border-radius:10px;padding:10px;font-size:17px;font-weight:700;text-align:center;font-family:inherit}
+.pred-row input:focus{outline:none;border-color:#22c55e}
+.dash{color:#475569;font-weight:700}
+.btn{background:#22c55e;color:#fff;border:none;border-radius:10px;padding:11px 14px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;width:100%;margin-top:10px}
+.btn:disabled{opacity:.5;cursor:default}
+.btn-ghost{background:transparent;border:1px solid #1c3326;color:#94a3b8}
+.btn-danger{background:transparent;border:1px solid rgba(239,68,68,.4);color:#ef4444}
+.btn-inline{width:auto;padding:8px 14px;margin:0}
+
+.field{margin-bottom:11px}
+.field label{display:block;font-size:12px;color:#94a3b8;margin-bottom:5px;font-weight:600}
+.field input{width:100%;background:#08120d;border:1px solid #1c3326;color:#f1f5f9;border-radius:10px;padding:12px;font-size:15px;font-family:inherit}
+.field input:focus{outline:none;border-color:#22c55e}
+.hint{font-size:11px;color:#64748b;margin-top:5px}
+
+.auth-wrap{padding:40px 16px 16px}
+.auth-title{font-size:26px;font-weight:800;letter-spacing:-.6px;margin-bottom:6px}
+.auth-sub{font-size:13px;color:#94a3b8;margin-bottom:22px;line-height:1.5}
+.auth-alt{text-align:center;font-size:13px;color:#64748b;margin-top:16px}
+.link{color:#4ade80;background:none;border:none;font:inherit;cursor:pointer;text-decoration:underline;padding:0}
+
+.otp-input{letter-spacing:.5em;text-align:center;font-size:24px!important;font-weight:800}
+
+.banner{border-radius:12px;padding:11px 13px;font-size:12px;line-height:1.5;margin-bottom:11px}
+.banner-warn{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:#fbbf24}
+.banner-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#f87171}
+
+.sel{width:100%;background:#101d15;border:1px solid #1c3326;color:#f1f5f9;border-radius:10px;padding:11px;font-size:14px;font-weight:600;font-family:inherit;margin-bottom:12px}
+.sel:focus{outline:none;border-color:#22c55e}
+
+.eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin:6px 0 10px}
+.empty{text-align:center;padding:36px 16px;color:#64748b;font-size:13px;line-height:1.6}
+
+.lb-row{display:flex;align-items:center;gap:12px;background:#101d15;border:1px solid #1c3326;border-radius:14px;padding:13px 15px;margin-bottom:8px}
+.lb-row.me{border-color:#22c55e;background:#0f1a30}
+.lb-rank{font-size:15px;font-weight:800;color:#64748b;width:26px;flex-shrink:0}
+.lb-row.me .lb-rank{color:#4ade80}
+.lb-name{flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lb-sub{font-size:11px;color:#64748b;font-weight:400;margin-top:2px}
+.lb-pts{font-size:19px;font-weight:800;letter-spacing:-.5px}
+
+.kv{display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid #1c3326;font-size:13px}
+.kv:last-child{border-bottom:none}
+.kv span:first-child{color:#94a3b8}
+.kv span:last-child{font-weight:600;text-align:right;word-break:break-word}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;z-index:200;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:calc(100% - 32px);max-width:420px}
+.toast{background:#1e293b;border:1px solid #334155;color:#f1f5f9;border-radius:12px;padding:11px 15px;font-size:13px;font-weight:600;animation:fadein .18s ease;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.toast.err{background:#3b1218;border-color:rgba(239,68,68,.5);color:#fca5a5}
+.toast.ok{background:#0d2a1f;border-color:rgba(16,185,129,.5);color:#6ee7b7}
+
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ============================================================
+   CONFIG — paste your two Supabase values here.
+   Both are safe in client code by design.
+   The football-data.org token is NOT here; it lives in the
+   Edge Function. See brief §4.4.
+   ============================================================ */
+const LOGO_DATA_URI = "data:image/webp;base64,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";
+const SUPABASE_URL      = "https://iwqqwcwxqfpcebnjpbqr.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Fd2ijqNtrsPr62ArsS9TGg_xKThWmzs";
+
+/* ============================================================ */
+
+const sb  = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const app = document.getElementById("app");
+
+const OPEN_STATUS = ["SCHEDULED", "TIMED"];
+const LIVE_STATUS = ["IN_PLAY", "PAUSED", "LIVE"];
+
+const S = {
+  ready: false, session: null, profile: null,
+  view: "login",              // login | signup | otp | reset
+  otpEmail: null, otpFlow: null,
+  tab: "predict",             // predict | results | table | settings
+  fixtures: [], preds: {}, board: [], syncAge: null,
+  md: null, rmd: null,
+  loadErr: null, boardErr: null, busy: false, tick: null, poll: null, pollN: 0
+};
+
+/* ---------------- helpers ---------------- */
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const fmtKick = iso => new Date(iso).toLocaleString(undefined,
+  { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+function countdown(iso) {
+  const ms = new Date(iso) - Date.now();
+  if (ms <= 0) return "locked";
+  const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+  if (h >= 1) return `${h}h ${m % 60}m`;
+  return `${m}m ${Math.floor(ms / 1000) % 60}s`;
+}
+
+function points(p, f) {
+  if (!p || f.home_score == null || f.away_score == null) return 0;
+  const actual = f.home_score > f.away_score ? "H" : f.home_score < f.away_score ? "A" : "D";
+  if (p.pick !== actual) return 0;
+  return actual === "D" ? 6 : 5;
+}
+
+function pickPreviewPoints(pick, f) {
+  return pick === "D" ? 6 : 5;
+}
+
+function pickLabel(pick, f) {
+  if (pick === "H") return esc(f.home_team) + " win";
+  if (pick === "A") return esc(f.away_team) + " win";
+  return "Draw";
+}
+
+function toast(msg, kind = "") {
+  const box = document.getElementById("toast");
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = msg;
+  box.appendChild(el);
+  setTimeout(() => el.remove(), 3600);
+}
+
+const crest = (url, name) => url
+  ? `<img src="${esc(url)}" alt="" onerror="this.style.display='none'"/>`
+  : `<div style="width:30px;height:30px;border-radius:50%;background:#1c3326;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#64748b">${esc((name || "?").slice(0, 2).toUpperCase())}</div>`;
+
+/* ---------------- data ---------------- */
+
+async function loadFixtures() {
+  const { data, error } = await sb.from("fixtures").select("*").order("kickoff_utc");
+  if (error) throw error;
+  S.fixtures = data || [];
+}
+
+async function loadPreds() {
+  if (!S.session) return;
+  const { data, error } = await sb.from("predictions")
+    .select("*").eq("user_id", S.session.user.id);
+  if (error) throw error;
+  S.preds = {};
+  (data || []).forEach(p => { S.preds[p.fixture_id] = p; });
+}
+
+async function loadProfile() {
+  const { data } = await sb.from("profiles").select("*")
+    .eq("id", S.session.user.id).maybeSingle();
+  S.profile = data || null;
+}
+
+async function loadSyncAge() {
+  const { data } = await sb.rpc("sync_age_seconds");
+  S.syncAge = typeof data === "number" ? data : null;
+}
+
+async function loadBoard() {
+  S.boardErr = null;
+  const { data, error } = await sb.rpc("get_leaderboard");
+  if (error) { S.boardErr = error.message; S.board = []; return; }
+  S.board = data || [];
+}
+
+async function loadAll() {
+  S.loadErr = null;
+  try {
+    await Promise.all([loadFixtures(), loadPreds(), loadProfile(), loadSyncAge()]);
+  } catch (e) {
+    S.loadErr = e.message || String(e);
+  }
+}
+
+/* ---------------- auth actions ---------------- */
+
+function calcAge(dobStr) {
+  const dob = new Date(dobStr);
+  if (isNaN(dob)) return 0;
+  const today = new Date();
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return age;
+}
+
+async function doSignup(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  const email = f.email.value.trim().toLowerCase();
+  const pw    = f.password.value;
+  const name  = f.full_name.value.trim();
+  const phone = f.phone.value.trim();
+  const dob   = f.dob.value;
+
+  if (name.length < 2)  return toast("Enter your name", "err");
+  if (pw.length < 8)    return toast("Password needs at least 8 characters", "err");
+  if (!/^[6-9]\d{9}$/.test(phone))
+    return toast("Enter a valid 10-digit Indian mobile number", "err");
+  if (!dob) return toast("Enter your date of birth", "err");
+  if (calcAge(dob) < 18) return toast("You must be 18 or older to register", "err");
+
+  setBusy(true);
+
+  // Friendly pre-check so a duplicate number fails with a clear message
+  // instead of a raw database error from the signup trigger.
+  const { data: taken, error: checkErr } = await sb.rpc("phone_is_taken", { p: phone });
+  if (checkErr) { setBusy(false); return toast(checkErr.message, "err"); }
+  if (taken)    { setBusy(false); return toast("This mobile number is already registered", "err"); }
+
+  const { data, error } = await sb.auth.signUp({
+    email, password: pw,
+    options: { data: {
+      full_name: name,
+      phone,
+      dob
+    } }
+  });
+  setBusy(false);
+
+  if (error) return toast(error.message, "err");
+
+  if (data.session) {
+    // Email confirmation is switched off in the project — that breaks
+    // the OTP requirement, so say so rather than silently letting them in.
+    toast("Turn on email confirmation in Supabase to enable OTP", "err");
+  }
+  S.otpEmail = email; S.otpFlow = "signup"; S.view = "otp";
+  render();
+  toast("Code sent to " + email, "ok");
+}
+
+async function doVerifyOtp(ev) {
+  ev.preventDefault();
+  const code = ev.target.code.value.trim();
+  // Hosted Supabase sends 6 digits, but longer tokens turn up on some
+  // versions. Don't hard-fail on length — that locks people out of their
+  // own account over a config detail they can't see.
+  if (!code) return toast("Enter the code from your email", "err");
+
+  setBusy(true);
+  const { error } = await sb.auth.verifyOtp({
+    email: S.otpEmail, token: code, type: "signup"
+  });
+  setBusy(false);
+  if (error) return toast(error.message, "err");
+  toast("You're in", "ok");   // onAuthStateChange takes it from here
+}
+
+async function resendOtp() {
+  setBusy(true);
+  const { error } = await sb.auth.resend({ type: "signup", email: S.otpEmail });
+  setBusy(false);
+  toast(error ? error.message : "New code sent", error ? "err" : "ok");
+}
+
+async function doLogin(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  setBusy(true);
+  const { error } = await sb.auth.signInWithPassword({
+    email: f.email.value.trim().toLowerCase(), password: f.password.value
+  });
+  setBusy(false);
+  if (error) return toast(error.message, "err");
+}
+
+async function startReset(email) {
+  const addr = (email || "").trim().toLowerCase();
+  if (!addr) return toast("Enter your email first", "err");
+  setBusy(true);
+  const { error } = await sb.auth.resetPasswordForEmail(addr);
+  setBusy(false);
+  if (error) return toast(error.message, "err");
+  S.otpEmail = addr; S.otpFlow = "recovery"; S.view = "reset";
+  render();
+  toast("Code sent to " + addr, "ok");
+}
+
+async function doReset(ev) {
+  ev.preventDefault();
+  const f = ev.target;
+  const code = f.code.value.trim(), pw = f.password.value;
+  if (!code)         return toast("Enter the code from your email", "err");
+  if (pw.length < 8) return toast("Password needs at least 8 characters", "err");
+
+  setBusy(true);
+  const v = await sb.auth.verifyOtp({ email: S.otpEmail, token: code, type: "recovery" });
+  if (v.error) { setBusy(false); return toast(v.error.message, "err"); }
+
+  const u = await sb.auth.updateUser({ password: pw });
+  setBusy(false);
+  if (u.error) return toast(u.error.message, "err");
+
+  S.view = "login"; S.tab = "settings";
+  render();
+  toast("Password changed", "ok");
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+}
+
+/* ---------------- prediction action ---------------- */
+
+async function savePrediction(fid, pick) {
+  if (!["H", "D", "A"].includes(pick)) return toast("Pick a result first", "err");
+
+  setBusy(true);
+  const { error } = await sb.from("predictions").upsert({
+    user_id: S.session.user.id, fixture_id: fid, pick
+  }, { onConflict: "user_id,fixture_id" });
+  setBusy(false);
+
+  if (error) {
+    // 42501 = RLS rejection, which here means kickoff has passed.
+    const msg = error.code === "42501"
+      ? "That match has kicked off — predictions are closed"
+      : error.message;
+    toast(msg, "err");
+    await loadFixtures();
+    renderKeepInputs();
+    return;
+  }
+
+  toast("Prediction saved", "ok");
+  await loadPreds();
+  renderKeepInputs();
+}
+
+/* ---------------- screens: auth ---------------- */
+
+function loginScreen() {
+  return `<div class="auth-wrap">
+    <div class="brand-row" style="justify-content:center;margin-bottom:26px">
+      <img class="brand-mark" src="${LOGO_DATA_URI}" alt="Redfooty"/>
+      <div class="logo"><em>Redfooty</em> EPL Predictor</div>
+    </div>
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-sub">Call the Win, Draw, or Loss on every Premier League match and see where you land.</div>
+    <form onsubmit="doLogin(event)">
+      <div class="field"><label for="li-email">Email</label>
+        <input id="li-email" name="email" type="email" autocomplete="email" required/></div>
+      <div class="field"><label for="li-pw">Password</label>
+        <input id="li-pw" name="password" type="password" autocomplete="current-password" required/></div>
+      <button class="btn" type="submit" ${S.busy ? "disabled" : ""}>${S.busy ? "Signing in…" : "Sign in"}</button>
+    </form>
+    <div class="auth-alt">
+      <button class="link" onclick="startReset(document.getElementById('li-email').value)">Forgot password?</button>
+    </div>
+    <div class="auth-alt">No account? <button class="link" onclick="go('signup')">Create one</button></div>
+  </div>`;
+}
+
+function signupScreen() {
+  return `<div class="auth-wrap">
+    <div class="brand-row" style="justify-content:center;margin-bottom:26px">
+      <img class="brand-mark" src="${LOGO_DATA_URI}" alt="Redfooty"/>
+      <div class="logo"><em>Redfooty</em> EPL Predictor</div>
+    </div>
+    <div class="auth-title">Create account</div>
+    <div class="auth-sub">We'll email you a 6-digit code to confirm it's you.</div>
+    <form onsubmit="doSignup(event)">
+      <div class="field"><label for="su-name">Full name</label>
+        <input id="su-name" name="full_name" type="text" autocomplete="name" required/></div>
+      <div class="field"><label for="su-email">Email</label>
+        <input id="su-email" name="email" type="email" autocomplete="email" required/></div>
+      <div class="field"><label for="su-phone">Mobile number</label>
+        <input id="su-phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric"
+               pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile number" required/>
+        <div class="hint">10-digit Indian mobile number. Codes still go to your email, not this number.</div></div>
+      <div class="field"><label for="su-dob">Date of birth</label>
+        <input id="su-dob" name="dob" type="date" required/>
+        <div class="hint">You must be 18 or older to register.</div></div>
+      <div class="field"><label for="su-pw">Password</label>
+        <input id="su-pw" name="password" type="password" autocomplete="new-password" required/>
+        <div class="hint">At least 8 characters.</div></div>
+      <button class="btn" type="submit" ${S.busy ? "disabled" : ""}>${S.busy ? "Sending code…" : "Send code"}</button>
+    </form>
+    <div class="auth-alt">Already registered? <button class="link" onclick="go('login')">Sign in</button></div>
+  </div>`;
+}
+
+function otpScreen() {
+  return `<div class="auth-wrap">
+    <div class="auth-title">Check your email</div>
+    <div class="auth-sub">We sent a 6-digit code to <strong>${esc(S.otpEmail)}</strong>. It expires in an hour.</div>
+    <form onsubmit="doVerifyOtp(event)">
+      <div class="field"><label for="otp">Code</label>
+        <input id="otp" class="otp-input" name="code" type="text" inputmode="numeric"
+               maxlength="10" autocomplete="one-time-code" placeholder="000000" required/></div>
+      <button class="btn" type="submit" ${S.busy ? "disabled" : ""}>${S.busy ? "Verifying…" : "Verify"}</button>
+    </form>
+    <div class="auth-alt"><button class="link" onclick="resendOtp()">Send another code</button></div>
+    <div class="auth-alt"><button class="link" onclick="go('signup')">Use a different email</button></div>
+  </div>`;
+}
+
+function resetScreen() {
+  return `<div class="auth-wrap">
+    <div class="auth-title">Set a new password</div>
+    <div class="auth-sub">Enter the code we sent to <strong>${esc(S.otpEmail)}</strong>, then choose a new password.</div>
+    <form onsubmit="doReset(event)">
+      <div class="field"><label for="rs-code">Code</label>
+        <input id="rs-code" class="otp-input" name="code" type="text" inputmode="numeric"
+               maxlength="10" autocomplete="one-time-code" placeholder="000000" required/></div>
+      <div class="field"><label for="rs-pw">New password</label>
+        <input id="rs-pw" name="password" type="password" autocomplete="new-password" required/>
+        <div class="hint">At least 8 characters.</div></div>
+      <button class="btn" type="submit" ${S.busy ? "disabled" : ""}>${S.busy ? "Saving…" : "Change password"}</button>
+    </form>
+    <div class="auth-alt"><button class="link" onclick="go('login')">Cancel</button></div>
+  </div>`;
+}
+
+/* ---------------- screens: app ---------------- */
+
+function shell() {
+  const name = S.profile?.full_name || S.session.user.email;
+  const tabs = [["predict", "Predict"], ["results", "Results"], ["table", "Table"], ["settings", "You"]];
+  return `
+    <div class="header">
+      <div class="header-top">
+        <div class="brand-row">
+          <img class="brand-mark" src="${LOGO_DATA_URI}" alt="Redfooty"/>
+          <div>
+            <div class="logo"><em>Redfooty</em> EPL Predictor</div>
+            <div class="logo-sub">India</div>
+          </div>
+        </div>
+      </div>
+      <div class="user-pill" style="margin-top:8px">${esc(name)}</div>
+      <div class="nav">
+        ${tabs.map(([k, label]) =>
+          `<button class="nav-btn ${S.tab === k ? "active" : ""}" onclick="setTab('${k}')">${label}</button>`
+        ).join("")}
+      </div>
+    </div>
+    <div class="section">
+      ${S.loadErr ? `<div class="banner banner-err">Couldn't load data: ${esc(S.loadErr)} <button class="link" onclick="refresh()">Retry</button></div>` : ""}
+      ${staleBanner()}
+      ${S.tab === "predict"  ? predictTab()  : ""}
+      ${S.tab === "results"  ? resultsTab()  : ""}
+      ${S.tab === "table"    ? tableTab()    : ""}
+      ${S.tab === "settings" ? settingsTab() : ""}
+    </div>`;
+}
+
+function staleBanner() {
+  if (S.syncAge == null || S.syncAge < 20 * 60) return "";
+  const mins = Math.floor(S.syncAge / 60);
+  const label = mins > 1440 ? "never run" : `${mins} minutes old`;
+  return `<div class="banner banner-warn">Match data is ${label}. Kickoff times and scores may be wrong — the sync job needs a look.</div>`;
+}
+
+function liveStrip() {
+  const live = S.fixtures.filter(f => LIVE_STATUS.includes(f.status));
+  if (!live.length) return "";
+  return `<div class="eyebrow">Live now</div>` + live.map(f => {
+    const p = S.preds[f.id];
+    return `<div class="card-live">
+      <div class="match-meta">
+        <span class="badge b-live"><span class="live-dot"></span>Live</span>
+        <span class="match-time">${f.status === "PAUSED" ? "Half time" : "In play"}</span>
+      </div>
+      <div class="teams-row">
+        <div class="team">${crest(f.home_crest, f.home_team)}<div class="team-name">${esc(f.home_team)}</div></div>
+        <div class="score">${f.home_score ?? 0} – ${f.away_score ?? 0}</div>
+        <div class="team">${crest(f.away_crest, f.away_team)}<div class="team-name">${esc(f.away_team)}</div></div>
+      </div>
+      ${p ? `<div class="match-time" style="text-align:center;margin-top:10px">You picked ${pickLabel(p.pick, f)}</div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function predictTab() {
+  const open = S.fixtures.filter(f =>
+    OPEN_STATUS.includes(f.status) && new Date(f.kickoff_utc) > new Date());
+
+  const strip = liveStrip();
+
+  if (!S.fixtures.length) {
+    return strip + `<div class="empty">No fixtures yet.<br/>The sync job hasn't put anything in the table — check <code>cron.job_run_details</code>.</div>`;
+  }
+  if (!open.length) {
+    return strip + `<div class="empty">Nothing left to predict.<br/>Every remaining fixture has kicked off.</div>`;
+  }
+
+  const mds = [...new Set(open.map(f => f.matchday))].sort((a, b) => a - b);
+  if (S.md == null || !mds.includes(S.md)) S.md = mds[0];
+  const list = open.filter(f => f.matchday === S.md);
+
+  return strip + `
+    <div class="eyebrow">Open fixtures</div>
+    <select class="sel" onchange="setMd(this.value)">
+      ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Matchday ${m}</option>`).join("")}
+    </select>
+    ${list.map(predictCard).join("")}`;
+}
+
+function pickBtn(f, side, label, active) {
+  const pts = pickPreviewPoints(side, f);
+  const accent = side === "D" ? "amber" : "blue";
+  return `<button class="pick-btn ${active ? "pick-active-" + accent : ""}"
+            onclick="savePrediction(${f.id},'${side}')" ${S.busy ? "disabled" : ""}>
+            <div class="pick-label">${label}</div>
+            <div class="pick-pts">+${pts} if right</div>
+          </button>`;
+}
+
+function predictCard(f) {
+  const p = S.preds[f.id];
+  const soon = new Date(f.kickoff_utc) - Date.now() < 3600000;
+  return `<div class="card">
+    <div class="match-meta">
+      <span class="match-time">${esc(fmtKick(f.kickoff_utc))}</span>
+      <span class="badge ${soon ? "b-soon" : "b-off"}">
+        locks in <span data-ko="${esc(f.kickoff_utc)}">${countdown(f.kickoff_utc)}</span>
+      </span>
+    </div>
+    <div class="teams-row">
+      <div class="team">${crest(f.home_crest, f.home_team)}<div class="team-name">${esc(f.home_team)}</div></div>
+      <div class="vs">vs</div>
+      <div class="team">${crest(f.away_crest, f.away_team)}<div class="team-name">${esc(f.away_team)}</div></div>
+    </div>
+    <div class="pred-row">
+      ${pickBtn(f, "H", esc(f.home_team) + " Win", p?.pick === "H")}
+      ${pickBtn(f, "D", "Draw", p?.pick === "D")}
+      ${pickBtn(f, "A", esc(f.away_team) + " Win", p?.pick === "A")}
+    </div>
+  </div>`;
+}
+
+function resultsTab() {
+  const fin = S.fixtures.filter(f => f.status === "FINISHED");
+  if (!fin.length) return `<div class="empty">No finished matches yet.<br/>Come back after the first whistle.</div>`;
+
+  const mds = [...new Set(fin.map(f => f.matchday))].sort((a, b) => b - a);
+  if (S.rmd == null || !mds.includes(S.rmd)) S.rmd = mds[0];
+  const list = fin.filter(f => f.matchday === S.rmd)
+                  .sort((a, b) => new Date(b.kickoff_utc) - new Date(a.kickoff_utc));
+
+  const mine = list.filter(f => S.preds[f.id]);
+  const total = mine.reduce((n, f) => n + points(S.preds[f.id], f), 0);
+
+  return `
+    <div class="eyebrow">Results</div>
+    <select class="sel" onchange="setRmd(this.value)">
+      ${mds.map(m => `<option value="${m}" ${m === S.rmd ? "selected" : ""}>Matchday ${m}</option>`).join("")}
+    </select>
+    <div class="card" style="display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:13px;font-weight:600">Matchday ${S.rmd}</div>
+        <div class="match-time">${mine.length} of ${list.length} predicted</div></div>
+      <div style="text-align:right"><div class="lb-pts">${total}</div>
+        <div class="match-time">points</div></div>
+    </div>
+    ${list.map(resultCard).join("")}`;
+}
+
+function ptBadgeClass(pt) {
+  if (pt <= 0) return "b-p0";
+  if (pt <= 4) return "b-p2";
+  if (pt <= 7) return "b-p5";
+  return "b-p10";
+}
+
+function resultCard(f) {
+  const p = S.preds[f.id];
+  const pt = points(p, f);
+  return `<div class="card">
+    <div class="match-meta">
+      <span class="match-time">${esc(fmtKick(f.kickoff_utc))}</span>
+      ${p ? `<span class="badge ${ptBadgeClass(pt)}">+${pt} pts</span>` : `<span class="badge b-off">no prediction</span>`}
+    </div>
+    <div class="teams-row">
+      <div class="team">${crest(f.home_crest, f.home_team)}<div class="team-name">${esc(f.home_team)}</div></div>
+      <div class="score">${f.home_score} – ${f.away_score}</div>
+      <div class="team">${crest(f.away_crest, f.away_team)}<div class="team-name">${esc(f.away_team)}</div></div>
+    </div>
+    ${p ? `<div class="match-time" style="text-align:center;margin-top:10px">You picked ${pickLabel(p.pick, f)}</div>` : ""}
+  </div>`;
+}
+
+function tableTab() {
+  if (S.boardErr) return `<div class="banner banner-err">Couldn't load the table: ${esc(S.boardErr)} <button class="link" onclick="refreshBoard()">Retry</button></div>`;
+  if (!S.board.length) return `<div class="empty">Nobody's on the board yet.<br/>Points appear once matches finish.</div>`;
+
+  const me = S.session.user.id;
+  return `<div class="eyebrow">Standings</div>` + S.board.map(r => `
+    <div class="lb-row ${r.user_id === me ? "me" : ""}">
+      <div class="lb-rank">${r.rank}</div>
+      <div class="lb-name">${esc(r.full_name || "Unnamed")}
+        <div class="lb-sub">${r.played} predicted · ${r.correct_picks} correct</div></div>
+      <div class="lb-pts">${r.points}</div>
+    </div>`).join("");
+}
+
+function settingsTab() {
+  const u = S.session.user;
+  const p = S.profile;
+  return `
+    <div class="eyebrow">Your details</div>
+    <div class="card">
+      <div class="kv"><span>Name</span><span>${esc(p?.full_name || "—")}</span></div>
+      <div class="kv"><span>Email</span><span>${esc(u.email)}</span></div>
+      <div class="kv"><span>Phone</span><span>${esc(p?.phone || "—")}</span></div>
+      <div class="kv"><span>Joined</span><span>${p ? new Date(p.created_at).toLocaleDateString() : "—"}</span></div>
+    </div>
+    <div class="eyebrow">Account</div>
+    <div class="card">
+      <div style="font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:12px">
+        Changing your password sends a 6-digit code to ${esc(u.email)} first.
+      </div>
+      <button class="btn btn-ghost" style="margin-top:0" onclick="startReset('${esc(u.email)}')">Change password</button>
+      <button class="btn btn-danger" onclick="doLogout()">Sign out</button>
+    </div>
+    <div class="card" style="background:transparent;border:none;text-align:center;padding-top:0">
+      <span class="match-time">Data synced ${S.syncAge == null ? "—" : Math.floor(S.syncAge / 60) + "m ago"}</span>
+    </div>`;
+}
+
+/* ---------------- render + routing ---------------- */
+
+function render() {
+  if (!S.ready) {
+    app.innerHTML = `<div class="empty" style="padding-top:80px"><span class="spin">◠</span><br/><br/>Starting up</div>`;
+    return;
+  }
+  if (S.view === "otp")   { app.innerHTML = otpScreen();   return stopTimers(); }
+  if (S.view === "reset") { app.innerHTML = resetScreen(); return stopTimers(); }
+  if (!S.session) {
+    app.innerHTML = S.view === "signup" ? signupScreen() : loginScreen();
+    return stopTimers();
+  }
+  app.innerHTML = shell();
+  startTimers();
+}
+
+// Re-render without losing whatever the person is halfway through typing.
+function renderKeepInputs() {
+  const snap = {};
+  document.querySelectorAll("input[data-keep]").forEach(i => { snap[i.id] = i.value; });
+  render();
+  Object.entries(snap).forEach(([id, v]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  });
+}
+
+function go(view)   { S.view = view; render(); }
+function setTab(t)  {
+  S.tab = t; render();
+  if (t === "table") refreshBoard();
+}
+function setMd(v)   { S.md  = Number(v); render(); }
+function setRmd(v)  { S.rmd = Number(v); render(); }
+function setBusy(b) { S.busy = b; renderKeepInputs(); }
+
+async function refresh() {
+  await loadAll();
+  renderKeepInputs();
+}
+
+async function refreshBoard() {
+  await loadBoard();
+  if (S.tab === "table") render();
+}
+
+/* ---------------- timers ---------------- */
+
+function startTimers() {
+  if (!S.tick) S.tick = setInterval(() => {
+    document.querySelectorAll("[data-ko]").forEach(el => {
+      el.textContent = countdown(el.dataset.ko);
+    });
+  }, 1000);
+
+  if (!S.poll) S.poll = setInterval(async () => {
+    S.pollN++;
+    const live = S.fixtures.some(f => LIVE_STATUS.includes(f.status));
+    // Every minute while matches are on, every five otherwise.
+    if (!live && S.pollN % 5 !== 0) return;
+    await loadFixtures();
+    await loadSyncAge();
+    renderKeepInputs();
+  }, 60000);
+}
+
+function stopTimers() {
+  clearInterval(S.tick); clearInterval(S.poll);
+  S.tick = null; S.poll = null;
+}
+
+/* ---------------- boot ---------------- */
+
+sb.auth.onAuthStateChange(async (event, session) => {
+  S.session = session;
+  S.ready = true;
+
+  if (session) {
+    if (S.view === "otp" || S.view === "signup") S.view = "login";
+    if (S.view !== "reset") {
+      await loadAll();
+      render();
+      if (S.tab === "table") refreshBoard();
+    }
+  } else {
+    S.profile = null; S.fixtures = []; S.preds = {}; S.board = [];
+    if (S.view !== "signup" && S.view !== "otp" && S.view !== "reset") S.view = "login";
+    render();
+  }
+});
+
+if (SUPABASE_URL.startsWith("PASTE")) {
+  S.ready = true;
+  app.innerHTML = `<div class="auth-wrap"><div class="banner banner-err">
+    Add your Supabase URL and anon key to the CONFIG block at the top of this file.
+  </div></div>`;
+}
+</script>
+</body>
+</html>
