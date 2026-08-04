@@ -236,9 +236,12 @@ for failed sends.
 
 **When something breaks:**
 ```sql
--- is the cron alive?
-select status, return_message, start_time from cron.job_run_details
-where jobname='sync-fixtures' order by start_time desc limit 10;
+-- is the cron alive? (job_run_details has no jobname column of its own —
+-- only jobid — so join to cron.job to filter by name)
+select j.jobname, jrd.status, jrd.return_message, jrd.start_time
+from cron.job_run_details jrd
+join cron.job j on j.jobid = jrd.jobid
+where j.jobname = 'sync-fixtures' order by jrd.start_time desc limit 10;
 
 -- did data land?
 select count(*), max(synced_at) from fixtures;

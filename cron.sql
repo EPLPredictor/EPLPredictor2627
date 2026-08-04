@@ -46,11 +46,13 @@ select cron.schedule(
 -- Is the job registered?
 --   select jobid, jobname, schedule, active from cron.job;
 
--- Did the last few runs succeed?
---   select runid, status, return_message, start_time
---   from cron.job_run_details
---   where jobname = 'sync-fixtures'
---   order by start_time desc limit 10;
+-- Did the last few runs succeed? cron.job_run_details has no jobname
+-- column of its own (only jobid) - join to cron.job to filter by name.
+--   select j.jobname, jrd.status, jrd.return_message, jrd.start_time
+--   from cron.job_run_details jrd
+--   join cron.job j on j.jobid = jrd.jobid
+--   where j.jobname = 'sync-fixtures'
+--   order by jrd.start_time desc limit 10;
 
 -- net.http_post returns immediately with a request id; the real
 -- HTTP result lands here a moment later:
