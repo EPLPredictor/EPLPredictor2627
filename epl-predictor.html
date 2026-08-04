@@ -264,21 +264,6 @@ async function loadAll() {
 
 /* ---------------- auth actions ---------------- */
 
-// Current age is never stored — it's derived from the age given at
-// signup plus however many full years have passed since then. Can't
-// go stale, no birthday to track. Accurate to the year of signup,
-// not the exact day; fine for display and for the 18+ gate, which
-// only ever needed "at least 18," not real age verification.
-function currentAge(ageAtSignup, createdAt) {
-  const signedUp = new Date(createdAt);
-  if (isNaN(signedUp)) return ageAtSignup;
-  const now = new Date();
-  let yearsSince = now.getFullYear() - signedUp.getFullYear();
-  const m = now.getMonth() - signedUp.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < signedUp.getDate())) yearsSince--;
-  return ageAtSignup + Math.max(0, yearsSince);
-}
-
 async function doSignup(ev) {
   ev.preventDefault();
   const f = ev.target;
@@ -328,9 +313,10 @@ async function doSignup(ev) {
 async function doVerifyOtp(ev) {
   ev.preventDefault();
   const code = ev.target.code.value.trim();
-  // Hosted Supabase sends 6 digits, but longer tokens turn up on some
-  // versions. Don't hard-fail on length — that locks people out of their
-  // own account over a config detail they can't see.
+  // This project's Supabase config sends 8-digit codes (Mailer OTP
+  // Length setting), but don't hard-fail on length regardless — that
+  // locks people out of their own account over a config detail they
+  // can't see, and it can change on the dashboard without a code change.
   if (!code) return toast("Enter the code from your email", "err");
 
   setBusy(true);
@@ -454,7 +440,7 @@ function signupScreen() {
       <div class="logo"><em>Redfooty</em> EPL Predictor</div>
     </div>
     <div class="auth-title">Create account</div>
-    <div class="auth-sub">We'll email you a 6-digit code to confirm it's you.</div>
+    <div class="auth-sub">We'll email you an 8-digit code to confirm it's you.</div>
     <form onsubmit="doSignup(event)">
       <div class="field"><label for="su-name">Full name</label>
         <input id="su-name" name="full_name" type="text" autocomplete="name" required/></div>
@@ -479,11 +465,11 @@ function signupScreen() {
 function otpScreen() {
   return `<div class="auth-wrap">
     <div class="auth-title">Check your email</div>
-    <div class="auth-sub">We sent a 6-digit code to <strong>${esc(S.otpEmail)}</strong>. It expires in an hour.</div>
+    <div class="auth-sub">We sent an 8-digit code to <strong>${esc(S.otpEmail)}</strong>. It expires in an hour.</div>
     <form onsubmit="doVerifyOtp(event)">
       <div class="field"><label for="otp">Code</label>
         <input id="otp" class="otp-input" name="code" type="text" inputmode="numeric"
-               maxlength="10" autocomplete="one-time-code" placeholder="000000" required/></div>
+               maxlength="10" autocomplete="one-time-code" placeholder="00000000" required/></div>
       <button class="btn" type="submit" ${S.busy ? "disabled" : ""}>${S.busy ? "Verifying…" : "Verify"}</button>
     </form>
     <div class="auth-alt"><button class="link" onclick="resendOtp()">Send another code</button></div>
@@ -498,7 +484,7 @@ function resetScreen() {
     <form onsubmit="doReset(event)">
       <div class="field"><label for="rs-code">Code</label>
         <input id="rs-code" class="otp-input" name="code" type="text" inputmode="numeric"
-               maxlength="10" autocomplete="one-time-code" placeholder="000000" required/></div>
+               maxlength="10" autocomplete="one-time-code" placeholder="00000000" required/></div>
       <div class="field"><label for="rs-pw">New password</label>
         <input id="rs-pw" name="password" type="password" autocomplete="new-password" required/>
         <div class="hint">At least 8 characters.</div></div>
@@ -700,20 +686,7 @@ function tableTab() {
 function rulesTab() {
   const r = REDFOOTY_RULES;
   return `
-    <div class="eyebrow">Prizes</div>
-    ${r.prizes.map((p, i) => `
-      <div class="card">
-        <div class="kv" style="border-bottom:none;padding-top:0">
-          <span style="font-weight:700;color:#f1f5f9">${esc(p.place)} place</span>
-          <span></span>
-        </div>
-        <div style="font-size:14px;font-weight:700;margin:2px 0 4px">${esc(p.title)}</div>
-        <div style="font-size:12px;color:#94a3b8;line-height:1.5">${esc(p.detail)}</div>
-      </div>
-    `).join("")}
-    <div class="banner banner-info">Prizes are subject to change before the season ends — the rules below always govern.</div>
-
-    <div class="eyebrow" style="margin-top:6px">Official Rules</div>
+    <div class="eyebrow">Official Rules</div>
     ${r.rulesSections.map(s => `
       <details class="card" style="padding:0">
         <summary style="padding:16px;cursor:pointer;font-weight:700;font-size:14px;list-style:none">${esc(s.title)}</summary>
@@ -722,6 +695,21 @@ function rulesTab() {
         </ul>
       </details>
     `).join("")}
+
+    <div class="eyebrow" style="margin-top:6px">Prizes</div>
+    <details class="card" style="padding:0">
+      <summary style="padding:16px;cursor:pointer;font-weight:700;font-size:14px;list-style:none">Prize pool — tap to expand</summary>
+      <div style="padding:0 16px 16px">
+        ${r.prizes.map(p => `
+          <div style="padding:12px 0;border-top:1px solid var(--line)">
+            <div style="font-weight:700;color:#f1f5f9">${esc(p.place)} place</div>
+            <div style="font-size:14px;font-weight:700;margin:2px 0 4px">${esc(p.title)}</div>
+            <div style="font-size:12px;color:#94a3b8;line-height:1.5">${esc(p.detail)}</div>
+          </div>
+        `).join("")}
+        <div style="font-size:11px;color:#9AA0A6;margin-top:8px">Prizes are subject to change before the season ends — the rules above always govern.</div>
+      </div>
+    </details>
 
     <div class="card" style="text-align:center;background:transparent;border:none">
       <a class="link" href="mailto:${esc(r.contactEmail)}?subject=Redfooty%20Predictor%20-%20Report%20an%20issue">Report an issue</a>
@@ -737,13 +725,12 @@ function settingsTab() {
       <div class="kv"><span>Name</span><span>${esc(p?.full_name || "—")}</span></div>
       <div class="kv"><span>Email</span><span>${esc(u.email)}</span></div>
       <div class="kv"><span>Phone</span><span>${esc(p?.phone || "—")}</span></div>
-      <div class="kv"><span>Age</span><span>${p ? currentAge(p.age_at_signup, p.created_at) : "—"}</span></div>
       <div class="kv"><span>Joined</span><span>${p ? new Date(p.created_at).toLocaleDateString() : "—"}</span></div>
     </div>
     <div class="eyebrow">Account</div>
     <div class="card">
       <div style="font-size:13px;color:#94a3b8;line-height:1.5;margin-bottom:12px">
-        Changing your password sends a 6-digit code to ${esc(u.email)} first.
+        Changing your password sends an 8-digit code to ${esc(u.email)} first.
       </div>
       <button class="btn btn-ghost" style="margin-top:0" onclick="startReset('${esc(u.email)}')">Change password</button>
       <button class="btn btn-danger" onclick="doLogout()">Sign out</button>
