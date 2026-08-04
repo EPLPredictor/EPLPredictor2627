@@ -365,24 +365,100 @@ $$;
 
 
 -- ------------------------------------------------------------
--- 7. GRANTS
+-- 7. REMINDERS  (daily, at most 300 emails/run — see README §11)
 --
--- Postgres grants EXECUTE to PUBLIC on every new function, so
--- revoking from `anon` alone leaves it wide open. Revoke from
--- PUBLIC first, then grant back only what's needed.
+-- reminder_log dedups by (user_id, matchday): once someone's been
+-- emailed about a gameweek, they're never emailed about it again,
+-- regardless of how many days the batch takes to work through the
+-- full candidate list. No RLS policies on purpose — this table holds
+-- no data anyone (anon or authenticated) needs to read directly; only
+-- the send-reminders Edge Function touches it, via the service role,
+-- which bypasses RLS entirely.
+-- ------------------------------------------------------------
+
+create table if not exists public.reminder_log (
+  user_id  uuid not null references auth.users(id) on delete cascade,
+  matchday int  not null,
+  sent_at  timestamptz not null default now(),
+  primary key (user_id, matchday)
+);
+
+alter table public.reminder_log enable row level security;
+
+
+-- Returns who to remind for a given gameweek: registered players who
+-- haven't predicted any fixture in it yet, and haven't already been
+-- sent a reminder for it. Joins auth.users for the email address,
+-- which is why this is SECURITY DEFINER — and exactly why it must
+-- NEVER be granted to anon/authenticated (see GRANTS below): it would
+-- hand any logged-in user every pending player's email address.
+
+create or replace function public.reminder_candidates(target_matchday int, batch_limit int default 300)
+returns table (user_id uuid, email text, full_name text)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select p.id, u.email, p.full_name
+  from public.profiles p
+  join auth.users u on u.id = p.id
+  where not exists (
+    select 1 from public.predictions pr
+    join public.fixtures fx on fx.id = pr.fixture_id
+    where pr.user_id = p.id and fx.matchday = target_matchday
+  )
+  and not exists (
+    select 1 from public.reminder_log rl
+    where rl.user_id = p.id and rl.matchday = target_matchday
+  )
+  order by p.created_at
+  limit batch_limit;
+$$;
+
+
+-- ------------------------------------------------------------
+-- 8. GRANTS
+--
+-- IMPORTANT, found the hard way: Supabase's default project setup
+-- grants EXECUTE on every new public-schema function directly to
+-- `anon` AND `authenticated` (via ALTER DEFAULT PRIVILEGES set up
+-- when the project was created) — separately from the PUBLIC
+-- pseudo-role. `revoke ... from public` does NOT touch those direct
+-- grants. A previous version of this file only revoked from public
+-- and believed get_leaderboard() was authenticated-only; it was
+-- actually callable by anon (fully unauthenticated) the whole time —
+-- confirmed live with a real anon-key RPC call. Fixed by naming the
+-- actual roles in every revoke below. If you add a new function here,
+-- verify its real grants with:
+--   select grantee, privilege_type from information_schema.routine_privileges
+--   where routine_name = '<function>';
+-- Don't trust the revoke statement alone — trust that query.
 --
 -- fixture_is_open is called from inside the RLS policies, which are
 -- evaluated as the *invoking* role — anon and authenticated. Revoking
 -- it breaks every prediction read/write with "permission denied for
 -- function". Looks removable. It isn't.
+--
+-- handle_new_user and touch_updated_at are trigger-only — they should
+-- never be callable directly by anyone, including authenticated.
+-- Revoking their EXECUTE grants doesn't break the triggers themselves:
+-- trigger execution doesn't go through the same privilege check as an
+-- ad-hoc RPC call.
+--
+-- reminder_candidates is deliberately NOT granted to anon or
+-- authenticated anywhere in this file. Only the service role (used by
+-- the send-reminders Edge Function) can call it, and the service role
+-- already has full access by default — no grant needed or wanted.
 -- ------------------------------------------------------------
 
 revoke all on public.leaderboard from anon, authenticated;
 
-revoke all on function public.get_leaderboard()      from public;
-revoke all on function public.handle_new_user()       from public;
-revoke all on function public.touch_updated_at()      from public;
-revoke all on function public.phone_is_taken(text)    from public;
+revoke execute on function public.get_leaderboard()           from public, anon, authenticated;
+revoke execute on function public.handle_new_user()            from public, anon, authenticated;
+revoke execute on function public.touch_updated_at()            from public, anon, authenticated;
+revoke execute on function public.phone_is_taken(text)         from public, anon, authenticated;
+revoke execute on function public.reminder_candidates(int, int) from public, anon, authenticated;
 
 grant execute on function public.get_leaderboard()      to authenticated;
 grant execute on function public.phone_is_taken(text)   to anon, authenticated;

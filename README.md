@@ -17,8 +17,9 @@ history from git log unless you're specifically asked to.
 
 ```
 schema.sql              the whole database: tables, RLS, kickoff lock, scoring, leaderboard
-cron.sql                pg_cron schedule template for the sync job (placeholders — see §4)
+cron.sql                pg_cron schedule template for both cron jobs (placeholders — see §4)
 index.ts                Edge Function: football-data.org -> fixtures table
+send-reminders.ts       Edge Function: daily reminder emails — see §11
 epl-predictor.html      the app itself — auth + 5 tabs (Predict/Results/Table/Rules/You)
 Landing_Page.html       public marketing/rules/prizes page, served at "/"
 rules-data.js           prizes + rules copy — single source of truth, loaded by BOTH
@@ -150,7 +151,7 @@ you change one, change both.
    `{{ .ConfirmationURL }}` entirely (if both are present, users click the link and skip
    the OTP screen). There's no "enable OTP" toggle — the template variable *is* the
    switch, and it renders empty rather than erroring if the casing is wrong.
-5. **Deploy the Edge Function:**
+5. **Deploy the Edge Functions:**
    ```
    supabase login   # or export SUPABASE_ACCESS_TOKEN
    supabase link --project-ref <ref>
@@ -161,8 +162,17 @@ you change one, change both.
      -H "Authorization: Bearer <anon-key>" -H "x-sync-secret: <sync-secret>"
    ```
    Expect `{"synced":380,...}`. Free token: https://www.football-data.org/client/register
-6. **Schedule the cron.** Copy `cron.sql`, fill in the three placeholders with real
-   values, run it in the SQL editor. Do not commit the filled-in copy (§1).
+
+   Then the reminder function (§11) — needs a Brevo **transactional API key**
+   (`xkeysib-...`, from Brevo → SMTP & API → API Keys — this is a different credential
+   from the SMTP relay login used for OTP emails):
+   ```
+   supabase secrets set BREVO_API_KEY=<xkeysib-...>
+   supabase secrets set REMINDER_SECRET=<openssl rand -hex 24 output — save it>
+   supabase functions deploy send-reminders
+   ```
+6. **Schedule the cron.** Copy `cron.sql`, fill in the placeholders with real values, run
+   it in the SQL editor. Do not commit the filled-in copy (§1).
 7. **Configure the app.** Paste the project URL and `anon` key into the CONFIG block in
    `epl-predictor.html`. Push to `main` — Netlify auto-deploys from the GitHub
    connection (`netlify.toml` routes `/` to the landing page and `/predict` to the app —
@@ -297,8 +307,39 @@ keeps working unattended. Add a `season` column before you care about last year'
 - A `season` column on `fixtures` and `predictions`, so year two doesn't wipe year one.
 - Leaderboard filters — Overall / This Gameweek / Eligible Only — per the planning doc's
   own site audit. The Table tab currently shows one combined view.
-- Reminder emails — see §11, being built to a simplified daily/300-per-day design
-  rather than the planning doc's original 48h+6h two-tier system.
+
+---
+
+## 11. Reminder emails
+
+Deliberately simpler than the planning doc's original 48h+6h two-tier design — see the
+project owner's own framing: "not very imp[ortant]," just "manage it somehow." What's
+actually built:
+
+- **Once a day, not per-fixture.** `send-reminders` (Edge Function) finds the current
+  gameweek — the earliest matchday with at least one fixture still open — and emails
+  every registered player who hasn't predicted any fixture in it yet.
+- **Hard-capped at 300 sends per run**, matching Brevo's free-tier daily limit (300/day,
+  9,000/month — confirmed directly against Brevo's pricing, not assumed, same discipline
+  as the football-data.org/ClubElo cost checks elsewhere in this project's history). If
+  the pending list is longer than 300, the rest simply wait for tomorrow's run.
+- **Dedup via `reminder_log`** (`user_id`, `matchday`): once someone's been emailed about
+  a gameweek, they're never emailed about it again, so a multi-day rollout through a
+  large pending list doesn't repeat itself — each day's run only picks up players nobody
+  has reached yet.
+- **No 300-user-base assumption baked in.** At small scale this clears the whole pending
+  list in one run, every day, indefinitely. Nothing needs to change if usage grows —
+  worst case is just that a large gameweek's backlog takes a few days to fully clear
+  instead of one.
+- Uses Brevo's transactional email API (`api.brevo.com/v3/smtp/email`), not the SMTP
+  relay used for OTP emails — needs its own credential, a Brevo **API key** (different
+  from the SMTP login/password pair). See §4 step 5.
+- `reminder_candidates(matchday, limit)` (SQL function) does the actual selection —
+  who's pending, who's already been emailed — and is the only thing that can read
+  `auth.users.email` outside Supabase Auth itself. It is **not** granted to
+  `anon`/`authenticated` anywhere; only the service role (used by the Edge Function) can
+  call it. Don't add that grant — it would let any logged-in user harvest every pending
+  player's email address.
 
 ---
 
