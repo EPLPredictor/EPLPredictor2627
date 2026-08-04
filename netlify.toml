@@ -15,29 +15,36 @@
 # schema, sync function source, ops docs, and the T&C PDF (marked
 # "prepared for internal use" — it has a public rules section but also
 # an internal site audit and roadmap) fetchable by anyone who guesses
-# the filename. Block them explicitly. rules-data.js is deliberately
-# NOT in this list — both public pages load it directly.
+# the filename. Block them explicitly. `force = true` is required on
+# each of these — Netlify does NOT apply a redirect over a path that
+# already resolves to a real file, unless forced. rules-data.js is
+# deliberately NOT in this list — both public pages load it directly.
 [[redirects]]
   from = "/schema.sql"
   to = "/Landing_Page.html"
   status = 404
+  force = true
 
 [[redirects]]
   from = "/cron.sql"
   to = "/Landing_Page.html"
   status = 404
+  force = true
 
 [[redirects]]
   from = "/index.ts"
   to = "/Landing_Page.html"
   status = 404
+  force = true
 
 [[redirects]]
   from = "/README.md"
   to = "/Landing_Page.html"
   status = 404
+  force = true
 
 [[redirects]]
   from = "/Terms_conditions_Plan.pdf"
   to = "/Landing_Page.html"
   status = 404
+  force = true
