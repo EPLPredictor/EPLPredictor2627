@@ -38,6 +38,12 @@
   force = true
 
 [[redirects]]
+  from = "/send-reminders.ts"
+  to = "/Landing_Page.html"
+  status = 404
+  force = true
+
+[[redirects]]
   from = "/README.md"
   to = "/Landing_Page.html"
   status = 404
