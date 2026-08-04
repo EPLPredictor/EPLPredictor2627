@@ -1,14 +1,12 @@
 -- ============================================================
--- EPL Predictor — Step 6: schedule the fixture sync
+-- EPL Predictor — schedule the fixture sync
 --
--- Run AFTER the sync-fixtures function is deployed and tested.
--- Replace the three <placeholders> below first.
---
--- Revision 2: the function URL now uses the documented form
---   https://<ref>.supabase.co/functions/v1/<name>
--- Revision 1 used https://<ref>.functions.supabase.co/<name>, which
--- may not resolve. Copy the exact URL from the Edge Functions page
--- in the dashboard rather than assembling it by hand.
+-- Run AFTER sync-fixtures is deployed and secrets are set (see
+-- README.md's deployment steps). Replace the three <placeholders>
+-- below with real values FROM THE DASHBOARD before running — then
+-- run the filled-in version directly in the SQL editor. Do not
+-- commit the filled-in version: this file is a template on purpose,
+-- so a real SYNC_SECRET never ends up in git history again.
 --
 -- If CREATE EXTENSION errors on permissions, enable pg_cron and
 -- pg_net from Dashboard -> Database -> Extensions instead, then
@@ -29,11 +27,11 @@ select cron.schedule(
   '*/5 * * * *',
   $$
   select net.http_post(
-    url     := 'https://iwqqwcwxqfpcebnjpbqr.supabase.co/functions/v1/sync-fixtures',
+    url     := 'https://<project-ref>.supabase.co/functions/v1/sync-fixtures',
     headers := jsonb_build_object(
                  'Content-Type',   'application/json',
-                 'Authorization',  'Bearer sb_publishable_Fd2ijqNtrsPr62ArsS9TGg_xKThWmzs',
-                 'x-sync-secret',  '7d4f9c2a8b1e6f53c9a7d0be4f1a93c7e82b5d1f6a4c9e31'
+                 'Authorization',  'Bearer <anon-key>',
+                 'x-sync-secret',  '<sync-secret>'
                ),
     timeout_milliseconds := 20000
   );
