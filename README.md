@@ -93,10 +93,11 @@ wrong:
 
 1. **Auth is entirely Supabase Auth.** No password column, no client-side hashing, no
    self-issued OTP. Signup writes to `auth.users`; a `SECURITY DEFINER` trigger copies
-   name/phone/DOB into `profiles`. The client never inserts into `profiles` directly.
-   Phone (Indian mobile, `^[6-9]\d{9}$`) and date of birth (18+) are format/age-checked
-   both in the HTML form and again inside the trigger, since the trigger is the only
-   thing standing between the public signup API and the table.
+   name/phone/age into `profiles`. The client never inserts into `profiles` directly.
+   Phone (Indian mobile, `^[6-9]\d{9}$`) and age (18+) are format/range-checked both in
+   the HTML form and again inside the trigger, since the trigger is the only thing
+   standing between the public signup API and the table. Age, not date of birth — see
+   the decisions log for why, and how "current age" stays accurate without storing one.
 2. **The kickoff lock is an RLS `WITH CHECK`**, not a disabled input. `fixture_is_open()`
    reads `fixtures.kickoff_utc`. A direct REST POST after kickoff returns `42501`.
 3. **Points are derived, never written.** `score()` is an immutable SQL function;
@@ -199,7 +200,7 @@ Read this before changing anything — each row is a question someone will re-as
 | **No admin override tab** | An override that writes scores would defeat derived scoring. | Medium — reintroduces the tampering surface. |
 | **`TIMED` counts as open, alongside `SCHEDULED`** | football-data.org v4 uses `TIMED` once kickoff is confirmed. Treat only `SCHEDULED` as open and every fixture looks locked. | n/a — this is just correct. |
 | **Phone mandatory + unique, format-checked only** | A real 10-digit Indian mobile number is a cheap authenticity/anti-duplicate filter without paying for SMS verification. Doesn't prove the number receives texts. | Medium to add real SMS verification — needs a paid gateway. |
-| **DOB mandatory, 18+ enforced** | Compliance requirement for a contest with real cash prizes. | Low to relax, but don't — this is a legal gate, not a UX preference. |
+| **Age (not date of birth) mandatory, 18+ enforced — revised 04 Aug 2026** | Compliance requirement for a contest with real cash prizes; unchanged. Originally collected as a full DOB, changed to a plain age input at the project owner's request. Neither is verified against real ID, so this doesn't weaken the gate — both are equally self-attested. "Current age" is derived (`age_at_signup` + full years since `created_at`), never stored, so it can't go stale without a birthdate on file. | Low to relax the 18+ threshold itself; **medium** to go back to DOB, since `profiles.dob` no longer exists — would need a real migration, not a revert. |
 | **Win/Draw/Loss picks, not exact scorelines** | Simpler format, matches an earlier predictor this team built. | High — touches `predictions`' shape, `score()`, the leaderboard view, the sync function, and the prediction UI. |
 | **Flat scoring (+5/+6/0), no upset bonus** | Two more elaborate formulas were tried and dropped — see §6. Simplicity and auditability won over rewarding upset calls. | Low to re-add a bonus in `score()` alone; **high** to bring back position/probability data, since those columns were removed, not just unused. |
 | **75%-of-matches-completed-so-far eligibility, rolling — revised from an earlier fixed-38-gameweek version** | The fixed-denominator version (participation counted by gameweek, against a hardcoded 38) made "eligible" meaningless until late in the season, and didn't measure per-match commitment. Revised (04 Aug 2026) to a rolling window against matches actually finished so far. | Low — it's the join condition in one view. |

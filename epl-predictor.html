@@ -264,14 +264,19 @@ async function loadAll() {
 
 /* ---------------- auth actions ---------------- */
 
-function calcAge(dobStr) {
-  const dob = new Date(dobStr);
-  if (isNaN(dob)) return 0;
-  const today = new Date();
-  let age = today.getFullYear() - dob.getFullYear();
-  const m = today.getMonth() - dob.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
-  return age;
+// Current age is never stored — it's derived from the age given at
+// signup plus however many full years have passed since then. Can't
+// go stale, no birthday to track. Accurate to the year of signup,
+// not the exact day; fine for display and for the 18+ gate, which
+// only ever needed "at least 18," not real age verification.
+function currentAge(ageAtSignup, createdAt) {
+  const signedUp = new Date(createdAt);
+  if (isNaN(signedUp)) return ageAtSignup;
+  const now = new Date();
+  let yearsSince = now.getFullYear() - signedUp.getFullYear();
+  const m = now.getMonth() - signedUp.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < signedUp.getDate())) yearsSince--;
+  return ageAtSignup + Math.max(0, yearsSince);
 }
 
 async function doSignup(ev) {
@@ -281,14 +286,14 @@ async function doSignup(ev) {
   const pw    = f.password.value;
   const name  = f.full_name.value.trim();
   const phone = f.phone.value.trim();
-  const dob   = f.dob.value;
+  const age   = parseInt(f.age.value, 10);
 
   if (name.length < 2)  return toast("Enter your name", "err");
   if (pw.length < 8)    return toast("Password needs at least 8 characters", "err");
   if (!/^[6-9]\d{9}$/.test(phone))
     return toast("Enter a valid 10-digit Indian mobile number", "err");
-  if (!dob) return toast("Enter your date of birth", "err");
-  if (calcAge(dob) < 18) return toast("You must be 18 or older to register", "err");
+  if (!Number.isInteger(age) || age < 18 || age >= 120)
+    return toast("You must be 18 or older to register", "err");
 
   setBusy(true);
 
@@ -303,7 +308,7 @@ async function doSignup(ev) {
     options: { data: {
       full_name: name,
       phone,
-      dob
+      age
     } }
   });
   setBusy(false);
@@ -459,8 +464,8 @@ function signupScreen() {
         <input id="su-phone" name="phone" type="tel" autocomplete="tel" inputmode="numeric"
                pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit mobile number" required/>
         <div class="hint">10-digit Indian mobile number. Codes still go to your email, not this number.</div></div>
-      <div class="field"><label for="su-dob">Date of birth</label>
-        <input id="su-dob" name="dob" type="date" required/>
+      <div class="field"><label for="su-age">Age</label>
+        <input id="su-age" name="age" type="number" inputmode="numeric" min="18" max="119" required/>
         <div class="hint">You must be 18 or older to register.</div></div>
       <div class="field"><label for="su-pw">Password</label>
         <input id="su-pw" name="password" type="password" autocomplete="new-password" required/>
@@ -732,6 +737,7 @@ function settingsTab() {
       <div class="kv"><span>Name</span><span>${esc(p?.full_name || "—")}</span></div>
       <div class="kv"><span>Email</span><span>${esc(u.email)}</span></div>
       <div class="kv"><span>Phone</span><span>${esc(p?.phone || "—")}</span></div>
+      <div class="kv"><span>Age</span><span>${p ? currentAge(p.age_at_signup, p.created_at) : "—"}</span></div>
       <div class="kv"><span>Joined</span><span>${p ? new Date(p.created_at).toLocaleDateString() : "—"}</span></div>
     </div>
     <div class="eyebrow">Account</div>

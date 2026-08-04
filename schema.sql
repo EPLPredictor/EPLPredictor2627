@@ -8,9 +8,10 @@
 -- Reflects the CURRENT rules only:
 --   - Win/Draw/Loss picks (not scorelines)
 --   - Flat scoring: correct win +5, correct draw +6, wrong 0
---   - Signup requires a verified-format Indian mobile number and a
---     date of birth proving 18+, both enforced again in the trigger
---     in case someone calls the signup API directly
+--   - Signup requires a verified-format Indian mobile number and an
+--     age of 18+ (stored as age_at_signup, not a date of birth — see
+--     §1), both enforced again in the trigger in case someone calls
+--     the signup API directly
 --   - Prize eligibility: predicted at least 75% of the matches that
 --     have finished SO FAR — a rolling window, not a fixed 38-gameweek
 --     denominator. See §5 below.
@@ -29,11 +30,11 @@
 -- ------------------------------------------------------------
 
 create table if not exists public.profiles (
-  id         uuid primary key references auth.users(id) on delete cascade,
-  full_name  text not null,
-  phone      text not null,
-  dob        date not null,
-  created_at timestamptz not null default now()
+  id             uuid primary key references auth.users(id) on delete cascade,
+  full_name      text not null,
+  phone          text not null,
+  age_at_signup  int  not null,
+  created_at     timestamptz not null default now()
 );
 
 alter table public.profiles
@@ -46,10 +47,18 @@ alter table public.profiles
 alter table public.profiles
   add constraint profiles_phone_unique unique (phone);
 
+-- Age, not date of birth — the app asks "how old are you", not for an
+-- exact birthdate. "Current age" is derived, never stored: it's
+-- age_at_signup + however many full years have passed since
+-- created_at (see the app's currentAge() helper and README §3). That
+-- means it can never go stale and there's no birthday to track, at
+-- the cost of being accurate to the year of signup rather than the
+-- exact day - fine for an 18+ gate, which only ever needs "is this
+-- number at least 18", never a real age-verification-grade check.
 alter table public.profiles
-  drop constraint if exists profiles_dob_18plus;
+  drop constraint if exists profiles_age_18plus;
 alter table public.profiles
-  add constraint profiles_dob_18plus check (dob <= (current_date - interval '18 years'));
+  add constraint profiles_age_18plus check (age_at_signup >= 18 and age_at_signup < 120);
 
 alter table public.profiles enable row level security;
 
@@ -81,23 +90,23 @@ set search_path = ''
 as $$
 declare
   v_phone text := trim(coalesce(new.raw_user_meta_data->>'phone', ''));
-  v_dob   date;
+  v_age   int;
 begin
   if v_phone !~ '^[6-9]\d{9}$' then
     raise exception 'A valid 10-digit Indian mobile number is required';
   end if;
 
   begin
-    v_dob := (new.raw_user_meta_data->>'dob')::date;
+    v_age := (new.raw_user_meta_data->>'age')::int;
   exception when others then
-    raise exception 'A valid date of birth is required';
+    raise exception 'A valid age is required';
   end;
 
-  if v_dob is null or v_dob > (current_date - interval '18 years') then
+  if v_age is null or v_age < 18 or v_age >= 120 then
     raise exception 'You must be 18 or older to register';
   end if;
 
-  insert into public.profiles (id, full_name, phone, dob)
+  insert into public.profiles (id, full_name, phone, age_at_signup)
   values (
     new.id,
     coalesce(
@@ -106,7 +115,7 @@ begin
       'Player'
     ),
     v_phone,
-    v_dob
+    v_age
   )
   on conflict (id) do nothing;
   return new;
