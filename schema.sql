@@ -11,8 +11,9 @@
 --   - Signup requires a verified-format Indian mobile number and a
 --     date of birth proving 18+, both enforced again in the trigger
 --     in case someone calls the signup API directly
---   - Prize eligibility: predicted at least 1 fixture in 29 of the
---     season's 38 gameweeks (75%)
+--   - Prize eligibility: predicted at least 75% of the matches that
+--     have finished SO FAR — a rolling window, not a fixed 38-gameweek
+--     denominator. See §5 below.
 --
 -- This project previously tried standings-gap and ClubElo-probability
 -- scoring (see git history / old HANDOVER_v5.md if you need the
@@ -247,13 +248,25 @@ create policy "read predictions" on public.predictions
 -- correct win (home/away) +5
 -- wrong pick                0
 --
--- Eligibility: TOTAL_GAMEWEEKS is hardcoded at 38 (the full PL
--- season) rather than computed from distinct matchdays in `fixtures`,
--- so a sync hiccup or a postponed-and-rescheduled fixture can't
--- quietly shrink the denominator mid-season. "Predicted a gameweek" =
--- at least one prediction row exists for a fixture in that matchday;
--- the kickoff-lock RLS already guarantees it was submitted before
--- that fixture locked, so no extra timing check is needed here.
+-- Eligibility is 75% of MATCHES, not gameweeks, on a ROLLING basis —
+-- deliberately revised from an earlier fixed-38-gameweek version (see
+-- README §5/§10 for why). matches_completed = however many fixtures
+-- have actually reached FINISHED so far; matches_predicted = how many
+-- of those this player had a prediction on. Both numbers grow together
+-- as the season progresses, so eligibility reflects "am I currently
+-- on pace" at any point in the season, not a number that's meaningless
+-- until the season is nearly over.
+--
+-- Restricting both sides to status = 'FINISHED' does double duty:
+-- it's the rolling window (only matches that have actually happened
+-- count), AND it's what makes postponed/abandoned fixtures excluded
+-- from the count automatically — they never reach FINISHED, so they
+-- can never enter the denominator OR the numerator. No special-case
+-- logic needed for that rule.
+--
+-- Before any match has finished, matches_completed = 0 and everyone
+-- is treated as eligible (100%) rather than dividing by zero or
+-- flagging players "not eligible" before there's any data.
 -- ------------------------------------------------------------
 
 create or replace function public.score(pick text, hs int, aws int)
@@ -282,11 +295,14 @@ select
                           when f.home_score < f.away_score then 'A'
                           else 'D' end)
   )::bigint   as correct_picks,
-  count(f.id)::bigint as played,
-  coalesce(gw.participation_gameweeks, 0)::bigint as participation_gameweeks,
-  38::bigint as total_gameweeks,
-  round(coalesce(gw.participation_gameweeks, 0)::numeric / 38 * 100, 1) as participation_pct,
-  coalesce(gw.participation_gameweeks, 0) >= 29 as eligible,
+  count(f.id)::bigint as matches_predicted,
+  mc.matches_completed,
+  case when mc.matches_completed = 0 then 100.0
+       else round(count(f.id)::numeric / mc.matches_completed * 100, 1)
+  end as participation_pct,
+  case when mc.matches_completed = 0 then true
+       else count(f.id)::numeric / mc.matches_completed >= 0.75
+  end as eligible,
   rank() over (
     order by coalesce(sum(
       public.score(pr.pick, f.home_score, f.away_score)
@@ -295,37 +311,34 @@ select
 from public.profiles p
 left join public.predictions pr on pr.user_id = p.id
 left join public.fixtures    f  on f.id = pr.fixture_id and f.status = 'FINISHED'
-left join (
-  select pr2.user_id, count(distinct fx.matchday) as participation_gameweeks
-  from public.predictions pr2
-  join public.fixtures fx on fx.id = pr2.fixture_id
-  group by pr2.user_id
-) gw on gw.user_id = p.id
-group by p.id, p.full_name, gw.participation_gameweeks;
+cross join (
+  select count(*)::bigint as matches_completed
+  from public.fixtures where status = 'FINISHED'
+) mc
+group by p.id, p.full_name, mc.matches_completed;
 
 
 -- The view reads profiles, which is self-only under RLS, so a direct
 -- select would return one row. Expose it through a definer function.
 create or replace function public.get_leaderboard()
 returns table (
-  user_id                 uuid,
-  full_name               text,
-  points                  bigint,
-  correct_picks           bigint,
-  played                  bigint,
-  participation_gameweeks bigint,
-  total_gameweeks         bigint,
-  participation_pct       numeric,
-  eligible                boolean,
-  rank                    bigint
+  user_id           uuid,
+  full_name         text,
+  points            bigint,
+  correct_picks     bigint,
+  matches_predicted bigint,
+  matches_completed bigint,
+  participation_pct numeric,
+  eligible          boolean,
+  rank              bigint
 )
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select l.user_id, l.full_name, l.points, l.correct_picks, l.played,
-         l.participation_gameweeks, l.total_gameweeks, l.participation_pct,
+  select l.user_id, l.full_name, l.points, l.correct_picks,
+         l.matches_predicted, l.matches_completed, l.participation_pct,
          l.eligible, l.rank
   from public.leaderboard l
   order by l.rank, l.full_name;
@@ -393,4 +406,4 @@ grant execute on function public.sync_age_seconds()      to anon, authenticated;
 -- select public.score('A', 2, 0);  -- expect 0 (wrong pick)
 
 -- select * from get_leaderboard();
--- -- expect participation_gameweeks/total_gameweeks/participation_pct/eligible present
+-- -- expect matches_predicted/matches_completed/participation_pct/eligible present

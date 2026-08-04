@@ -9,9 +9,7 @@
 
 const REDFOOTY_RULES = {
   season: "2026/27",
-  totalGameweeks: 38,
-  eligibilityGameweeks: 29, // 75% of 38
-  eligibilityPct: 75,
+  eligibilityPct: 75, // of matches completed so far — a rolling window, not a fixed season total
   scoring: { win: 5, draw: 6, wrong: 0 },
   contactEmail: "predictorepl@gmail.com",
 
@@ -57,18 +55,18 @@ const REDFOOTY_RULES = {
     {
       title: "The 75% Participation Rule",
       points: [
-        "The Premier League season runs 38 gameweeks.",
-        "A player must submit at least one prediction in 75% of gameweeks (29 of 38) to remain eligible for a prize.",
-        "“Submitting a gameweek” means predicting at least one fixture in that gameweek before it locks — partial gameweeks still count toward the 75% threshold, but only correctly-predicted fixtures earn points.",
-        "Players below the threshold can keep playing and appear on the leaderboard, but are flagged as “not currently eligible” and cannot claim a top-3 prize even if their points would otherwise qualify.",
-        "Postponed or abandoned fixtures are excluded from both scoring and the participation count, for everyone.",
+        "Prize eligibility is based on 75% of matches — not gameweeks — and it's a rolling requirement, recalculated continuously as the season goes on.",
+        "Specifically: of all the matches that have finished so far this season, you must have predicted at least 75% of them to be currently eligible for a prize. Example: if 30 matches have been completed and you predicted 15 of them, that's 50% — below the threshold, not eligible right now.",
+        "Because it's rolling, your eligibility can move up or down as the season progresses — it's always measured against matches played to date, not a fixed target set once at the start.",
+        "Players below the threshold can keep playing and appear on the leaderboard, but are flagged as “not currently eligible” and cannot claim a top-3 prize unless they're back above 75% by the time the season ends.",
+        "Postponed or abandoned fixtures are excluded from both scoring and the participation count, for everyone — they're simply never counted as \"completed.\"",
       ],
     },
     {
       title: "Tie-Breakers",
       points: [
         "1. Higher number of correctly predicted draws (rewards the harder skill).",
-        "2. Higher gameweek participation percentage.",
+        "2. Higher match participation percentage.",
         "3. Earlier account registration date.",
         "4. If still tied, a sudden-death predictor question on the final matchday decides it.",
       ],

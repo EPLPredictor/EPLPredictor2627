@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Redfooty EPL Predictor</title>
+<link rel="icon" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -58,9 +59,7 @@
   .logo{display:flex;align-items:center;gap:10px;font-family:'Anton';font-size:20px;letter-spacing:.5px;}
   .logo-badge{
     width:36px;height:36px;border-radius:50%;
-    background:radial-gradient(circle at 35% 30%, var(--maroon) 0%, var(--maroon-deep) 70%);
-    display:flex;align-items:center;justify-content:center;
-    color:#F2D9A8;font-size:15px;border:2px solid #F2D9A8;
+    object-fit:cover;flex-shrink:0;
   }
   .navlinks{display:flex;gap:28px;font-size:13px;font-weight:600;letter-spacing:.3px;color:#3a3d42;}
   .navlinks a:hover{color:var(--crimson);}
@@ -226,7 +225,7 @@
 <body>
 
   <nav>
-    <div class="logo"><div class="logo-badge">R</div>REDFOOTY <span style="color:var(--crimson)">·</span> PREDICTOR</div>
+    <div class="logo"><img class="logo-badge" src="/logo-96.png" alt="Redfooty"/>REDFOOTY <span style="color:var(--crimson)">·</span> PREDICTOR</div>
     <div class="navlinks">
       <a href="#prizes">Prizes</a>
       <a href="#how-it-works">How It Works</a>
@@ -261,7 +260,7 @@
       <div class="section-head">
         <div class="eyebrow">The Prize Pool</div>
         <h2>Play All Season. Win Big.</h2>
-        <p>Prizes go to the top 3 eligible players once the season ends. Eligibility requires predicting at least 75% of gameweeks — see <a href="#rules" style="text-decoration:underline">Rules</a>.</p>
+        <p>Prizes go to the top 3 eligible players once the season ends. Eligibility requires predicting at least 75% of matches completed so far — see <a href="#rules" style="text-decoration:underline">Rules</a>.</p>
       </div>
       <div class="prize-grid" id="prize-grid"></div>
       <div class="prizes-note">Prize amounts and items are subject to change before the season ends — the current rules always govern.</div>
@@ -289,7 +288,7 @@
         <div class="how-step">
           <div class="how-num">03</div>
           <h3>Climb the table</h3>
-          <p id="eligibility-copy">Points add up across all 38 gameweeks. Predict at least 75% of gameweeks to stay eligible for prizes.</p>
+          <p id="eligibility-copy">Points add up all season. Predict at least 75% of matches played so far to stay eligible for prizes.</p>
         </div>
       </div>
     </div>
@@ -299,7 +298,7 @@
   <div class="strip">
     <div class="wrap">
       <strong>ELIGIBILITY —</strong>
-      <span id="eligibility-strip-copy">Predict at least 29 of 38 gameweeks (75%) to qualify for prizes. Full rules cover ties, deadlines &amp; disputes.</span>
+      <span id="eligibility-strip-copy">Predict at least 75% of matches completed so far to qualify for prizes — a rolling requirement. Full rules cover ties, deadlines &amp; disputes.</span>
     </div>
   </div>
 
@@ -398,9 +397,9 @@
     document.getElementById("scoring-copy").textContent =
       `Pick Win / Draw / Loss for every fixture before it locks at kickoff. Correct results score ${REDFOOTY_RULES.scoring.win}, correct draws score ${REDFOOTY_RULES.scoring.draw}.`;
     document.getElementById("eligibility-copy").textContent =
-      `Points add up across all ${REDFOOTY_RULES.totalGameweeks} gameweeks. Predict at least ${REDFOOTY_RULES.eligibilityPct}% of gameweeks to stay eligible for prizes.`;
+      `Points add up all season. Predict at least ${REDFOOTY_RULES.eligibilityPct}% of matches played so far to stay eligible for prizes.`;
     document.getElementById("eligibility-strip-copy").textContent =
-      `Predict at least ${REDFOOTY_RULES.eligibilityGameweeks} of ${REDFOOTY_RULES.totalGameweeks} gameweeks (${REDFOOTY_RULES.eligibilityPct}%) to qualify for prizes. Full rules cover ties, deadlines & disputes.`;
+      `Predict at least ${REDFOOTY_RULES.eligibilityPct}% of matches completed so far to qualify for prizes — a rolling requirement, not a one-time target. Full rules cover ties, deadlines & disputes.`;
     document.getElementById("contact-link").href = `mailto:${REDFOOTY_RULES.contactEmail}?subject=Redfooty%20Predictor%20-%20Report%20an%20issue`;
 
     // --- countdown to the next open fixture (falls back to a fixed date if the fetch fails) ---

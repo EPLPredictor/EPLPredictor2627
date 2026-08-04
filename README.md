@@ -26,6 +26,8 @@ rules-data.js           prizes + rules copy — single source of truth, loaded b
                          prize or a rule — prizes are explicitly tentative, see §5)
 Terms_conditions_Plan.pdf   full T&C planning doc — NOT public, see the note below
 netlify.toml            routing (see §1a) + blocks non-public files from being served
+logo-96.png / favicon.png   the real Redfooty logo, resized for web (source: Logo.png,
+                         1.9MB — never reference that one directly, it's for design use)
 ```
 
 No framework, no `package.json`, no build step anywhere. Deploying a code change is:
@@ -116,12 +118,17 @@ correct win       5
 Deliberately flat — no bonus for calling an upset. Two more elaborate formulas were
 tried and dropped; see §6 if you want the history.
 
-**Prize eligibility:** a player must have predicted at least one fixture in 29 of the
-season's 38 gameweeks (75%). `total_gameweeks` is hardcoded at 38 rather than computed
-from `fixtures`, so a sync hiccup or a postponed/rescheduled fixture can't quietly
-shrink the denominator mid-season. `get_leaderboard()` returns
-`participation_gameweeks`, `total_gameweeks`, `participation_pct`, and `eligible` per
-player; the Table tab in `epl-predictor.html` renders all four.
+**Prize eligibility:** a player must have predicted at least 75% of the matches that
+have **finished so far** — not gameweeks, and not a fixed season-long total. It's a
+rolling window: both the numerator (`matches_predicted`) and denominator
+(`matches_completed`) grow as the season progresses, so "eligible" always means "on pace
+right now," not "on pace for a target that's meaningless until the season nearly ends."
+Restricting both sides to `status = 'FINISHED'` also automatically excludes postponed/
+abandoned fixtures from the count — no special-case logic needed, since those never
+reach `FINISHED`. Before any match finishes, everyone is treated as eligible (100%)
+rather than dividing by zero. `get_leaderboard()` returns `matches_predicted`,
+`matches_completed`, `participation_pct`, and `eligible` per player; the Table tab in
+`epl-predictor.html` renders all four. See `schema.sql` §5 for the exact logic.
 
 `public.score(pick, home_score, away_score)` is the authoritative implementation.
 `epl-predictor.html`'s JS `points()` duplicates it for per-match badge rendering — if
@@ -185,7 +192,7 @@ Read this before changing anything — each row is a question someone will re-as
 | **DOB mandatory, 18+ enforced** | Compliance requirement for a contest with real cash prizes. | Low to relax, but don't — this is a legal gate, not a UX preference. |
 | **Win/Draw/Loss picks, not exact scorelines** | Simpler format, matches an earlier predictor this team built. | High — touches `predictions`' shape, `score()`, the leaderboard view, the sync function, and the prediction UI. |
 | **Flat scoring (+5/+6/0), no upset bonus** | Two more elaborate formulas were tried and dropped — see §6. Simplicity and auditability won over rewarding upset calls. | Low to re-add a bonus in `score()` alone; **high** to bring back position/probability data, since those columns were removed, not just unused. |
-| **75%-of-38-gameweeks eligibility, fixed denominator** | Confirmed rule for prize qualification. Fixed at 38 so it can't shift if fixtures get rescheduled mid-season. | Low — it's one constant in one view. |
+| **75%-of-matches-completed-so-far eligibility, rolling — revised from an earlier fixed-38-gameweek version** | The fixed-denominator version (participation counted by gameweek, against a hardcoded 38) made "eligible" meaningless until late in the season, and didn't measure per-match commitment. Revised (04 Aug 2026) to a rolling window against matches actually finished so far. | Low — it's the join condition in one view. |
 | **`cron.sql` ships as a placeholder template, never a filled-in file** | An earlier version of this project committed a real `SYNC_SECRET` to git. Rotated once discovered; won't happen twice. | n/a — this is just correct. |
 | **Prizes/rules live in `rules-data.js`, not hardcoded in either HTML file** | Prizes are explicitly tentative (project owner, Aug 2026) and the exact rules text comes from `Terms_conditions_Plan.pdf` §1. One data file both pages load means an edit can't apply to only one of them. | Low — it's one file. |
 | **`Terms_conditions_Plan.pdf` blocked from public access via `netlify.toml`** | The PDF is marked "prepared for internal use" and mixes public rules text with an internal site audit/roadmap not meant for players. The public rules text was extracted into `rules-data.js` instead. | Low — remove the redirect rule if the PDF is ever cleaned up for public release. |
@@ -290,24 +297,8 @@ keeps working unattended. Add a `season` column before you care about last year'
 - A `season` column on `fixtures` and `predictions`, so year two doesn't wipe year one.
 - Leaderboard filters — Overall / This Gameweek / Eligible Only — per the planning doc's
   own site audit. The Table tab currently shows one combined view.
-- **Known correctness gap, found while implementing §3 (eligibility):** the planning doc
-  says "postponed or abandoned fixtures are excluded from both scoring and the
-  participation count, for everyone" — but `schema.sql`'s `participation_gameweeks`
-  subquery counts *any* predicted fixture toward a gameweek regardless of its final
-  status, so a predicted-then-postponed fixture currently still counts toward the 75%
-  threshold. Scoring itself is unaffected (postponed fixtures never reach `FINISHED`, so
-  `score()` never awards points for them) — this only affects the participation count.
-  Worth a deliberate fix, not a silent one, since it changes who's "eligible."
-- **Automated reminder emails (48h / 4–6h before each gameweek's first kickoff)** — fully
-  designed in the planning doc's §3 but not built. Would need: a track of "has this user
-  predicted this gameweek yet" (derivable from existing tables), a scheduled job similar
-  to the sync cron, and Brevo template(s) for the two reminder tiers. Marked High priority
-  in the planning doc.
-- Brand consistency: `epl-predictor.html` uses its own dark green/emerald theme;
-  `Landing_Page.html` (and redfooty.com) uses maroon/crimson/teal with an Anton display
-  font. Flagged explicitly in the planning doc as High priority. Not changed as part of
-  this pass — restyling a live, already-tested app is a bigger, riskier change than
-  building the new landing page, and wasn't explicitly requested.
+- Reminder emails — see §11, being built to a simplified daily/300-per-day design
+  rather than the planning doc's original 48h+6h two-tier system.
 
 ---
 
