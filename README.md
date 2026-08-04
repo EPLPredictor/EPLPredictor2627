@@ -19,16 +19,39 @@ history from git log unless you're specifically asked to.
 schema.sql              the whole database: tables, RLS, kickoff lock, scoring, leaderboard
 cron.sql                pg_cron schedule template for the sync job (placeholders — see §4)
 index.ts                Edge Function: football-data.org -> fixtures table
-epl-predictor.html      the whole app — auth + 4 tabs, single file, no build step
-Landing_Page.html       marketing/mockup page — placeholder data, not wired to Supabase
-Terms_conditions_Plan.pdf   T&Cs for the contest
-netlify.toml            makes a git-connected Netlify deploy serve epl-predictor.html at "/"
+epl-predictor.html      the app itself — auth + 5 tabs (Predict/Results/Table/Rules/You)
+Landing_Page.html       public marketing/rules/prizes page, served at "/"
+rules-data.js           prizes + rules copy — single source of truth, loaded by BOTH
+                         HTML pages (edit here, not in either HTML file, to change a
+                         prize or a rule — prizes are explicitly tentative, see §5)
+Terms_conditions_Plan.pdf   full T&C planning doc — NOT public, see the note below
+netlify.toml            routing (see §1a) + blocks non-public files from being served
 ```
 
 No framework, no `package.json`, no build step anywhere. Deploying a code change is:
-edit the file, commit, push. Netlify auto-deploys `epl-predictor.html` from this repo's
-`main` branch (see `netlify.toml`). `schema.sql`, `cron.sql`, and `index.ts` deploy to
-Supabase via the CLI or by pasting into the SQL editor — see §4.
+edit the file, commit, push. Netlify auto-deploys from this repo's `main` branch (see
+`netlify.toml`). `schema.sql`, `cron.sql`, and `index.ts` deploy to Supabase via the CLI
+or by pasting into the SQL editor — see §4.
+
+**`Terms_conditions_Plan.pdf` is in this repo but deliberately not public** —
+`netlify.toml` returns 404 for it. It's marked "prepared for internal use": alongside the
+official rules text (which IS public, published as the Rules section of both
+`Landing_Page.html` and the app's Rules tab) it also has an internal site audit and
+launch roadmap that was never meant to be visible to players. If you add real public
+Terms/Privacy copy later, put it in a new file — don't unblock this one.
+
+### 1a. Site map
+
+```
+/            Landing_Page.html   marketing, prizes, rules, sample leaderboard — public
+/predict     epl-predictor.html  the actual app — login/signup/OTP + the 5 tabs
+```
+
+A returning visitor with an active session is redirected from `/` straight to `/predict`
+(see the `getSession()` check near the top of `Landing_Page.html`'s script) — the
+marketing page is only for first-time / logged-out visitors. The landing page's
+"Register" button links to `/predict?view=signup`, which opens the app straight to the
+signup screen instead of login.
 
 **Three secrets, none of them in this repo:**
 
@@ -135,8 +158,9 @@ you change one, change both.
    values, run it in the SQL editor. Do not commit the filled-in copy (§1).
 7. **Configure the app.** Paste the project URL and `anon` key into the CONFIG block in
    `epl-predictor.html`. Push to `main` — Netlify auto-deploys from the GitHub
-   connection (`netlify.toml` makes it serve at `/`). Add the Netlify URL to
-   **Authentication → URL Configuration** (Site URL + Redirect URLs).
+   connection (`netlify.toml` routes `/` to the landing page and `/predict` to the app —
+   see §1a). Add the Netlify URL to **Authentication → URL Configuration** (Site URL +
+   Redirect URLs) — the wildcard covers `/predict` too, no extra entry needed.
 8. **Verify** — see §7.
 
 Realistic first-time-through: 45–75 minutes, mostly waiting on the project to spin up
@@ -163,6 +187,8 @@ Read this before changing anything — each row is a question someone will re-as
 | **Flat scoring (+5/+6/0), no upset bonus** | Two more elaborate formulas were tried and dropped — see §6. Simplicity and auditability won over rewarding upset calls. | Low to re-add a bonus in `score()` alone; **high** to bring back position/probability data, since those columns were removed, not just unused. |
 | **75%-of-38-gameweeks eligibility, fixed denominator** | Confirmed rule for prize qualification. Fixed at 38 so it can't shift if fixtures get rescheduled mid-season. | Low — it's one constant in one view. |
 | **`cron.sql` ships as a placeholder template, never a filled-in file** | An earlier version of this project committed a real `SYNC_SECRET` to git. Rotated once discovered; won't happen twice. | n/a — this is just correct. |
+| **Prizes/rules live in `rules-data.js`, not hardcoded in either HTML file** | Prizes are explicitly tentative (project owner, Aug 2026) and the exact rules text comes from `Terms_conditions_Plan.pdf` §1. One data file both pages load means an edit can't apply to only one of them. | Low — it's one file. |
+| **`Terms_conditions_Plan.pdf` blocked from public access via `netlify.toml`** | The PDF is marked "prepared for internal use" and mixes public rules text with an internal site audit/roadmap not meant for players. The public rules text was extracted into `rules-data.js` instead. | Low — remove the redirect rule if the PDF is ever cleaned up for public release. |
 
 ---
 
@@ -262,8 +288,26 @@ keeps working unattended. Add a `season` column before you care about last year'
 - Mini-leagues: a `leagues` table + `league_members`, and a `get_leaderboard(league_id)`
   overload. The scoring function doesn't change.
 - A `season` column on `fixtures` and `predictions`, so year two doesn't wipe year one.
-- Wire `Landing_Page.html` to real Supabase data instead of placeholder rows, and link
-  it from/to `epl-predictor.html`.
+- Leaderboard filters — Overall / This Gameweek / Eligible Only — per the planning doc's
+  own site audit. The Table tab currently shows one combined view.
+- **Known correctness gap, found while implementing §3 (eligibility):** the planning doc
+  says "postponed or abandoned fixtures are excluded from both scoring and the
+  participation count, for everyone" — but `schema.sql`'s `participation_gameweeks`
+  subquery counts *any* predicted fixture toward a gameweek regardless of its final
+  status, so a predicted-then-postponed fixture currently still counts toward the 75%
+  threshold. Scoring itself is unaffected (postponed fixtures never reach `FINISHED`, so
+  `score()` never awards points for them) — this only affects the participation count.
+  Worth a deliberate fix, not a silent one, since it changes who's "eligible."
+- **Automated reminder emails (48h / 4–6h before each gameweek's first kickoff)** — fully
+  designed in the planning doc's §3 but not built. Would need: a track of "has this user
+  predicted this gameweek yet" (derivable from existing tables), a scheduled job similar
+  to the sync cron, and Brevo template(s) for the two reminder tiers. Marked High priority
+  in the planning doc.
+- Brand consistency: `epl-predictor.html` uses its own dark green/emerald theme;
+  `Landing_Page.html` (and redfooty.com) uses maroon/crimson/teal with an Anton display
+  font. Flagged explicitly in the planning doc as High priority. Not changed as part of
+  this pass — restyling a live, already-tested app is a bigger, riskier change than
+  building the new landing page, and wasn't explicitly requested.
 
 ---
 
