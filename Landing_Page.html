@@ -51,21 +51,32 @@
 
   /* ---- NAV ---- */
   nav{
-    display:flex;align-items:center;justify-content:space-between;
-    padding:18px 28px;border-bottom:1px solid var(--line-dark);
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:16px 20px;border-bottom:1px solid var(--line-dark);
     max-width:1080px;margin:0 auto;
     position:sticky;top:0;background:rgba(255,255,255,.92);backdrop-filter:blur(6px);z-index:50;
   }
-  .logo{display:flex;align-items:center;gap:10px;font-family:'Anton';font-size:20px;letter-spacing:.5px;}
+  .logo{
+    display:flex;align-items:center;gap:8px;font-family:'Anton';font-size:20px;letter-spacing:.3px;
+    min-width:0;flex:1 1 auto;
+  }
+  .logo-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .logo-badge{
-    width:36px;height:36px;border-radius:50%;
+    width:32px;height:32px;border-radius:50%;
     object-fit:cover;flex-shrink:0;
   }
   .navlinks{display:flex;gap:28px;font-size:13px;font-weight:600;letter-spacing:.3px;color:#3a3d42;}
   .navlinks a:hover{color:var(--crimson);}
   .cta-pill{
-    background:var(--crimson);color:#fff;padding:11px 22px;border-radius:999px;
+    flex-shrink:0;white-space:nowrap;
+    background:var(--crimson);color:#fff;padding:11px 20px;border-radius:999px;
     font-size:13px;font-weight:700;letter-spacing:.3px;border:none;cursor:pointer;font-family:inherit;
+  }
+
+  @media(max-width:420px){
+    .logo{font-size:15px;gap:6px;}
+    .logo-badge{width:26px;height:26px;}
+    .cta-pill{padding:9px 14px;font-size:12px;}
   }
 
   /* ---- HERO ---- */
@@ -225,14 +236,14 @@
 <body>
 
   <nav>
-    <div class="logo"><img class="logo-badge" src="/logo-96.png" alt="Redfooty"/>REDFOOTY <span style="color:var(--crimson)">·</span> PREDICTOR</div>
+    <div class="logo"><img class="logo-badge" src="/logo-96.png" alt="Redfooty"/><span class="logo-text">REDFOOTY EPL PREDICTOR</span></div>
     <div class="navlinks">
       <a href="#prizes">Prizes</a>
       <a href="#how-it-works">How It Works</a>
       <a href="#rules">Rules</a>
       <a href="#standings">Leaderboard</a>
     </div>
-    <a class="cta-pill" href="/predict">Register to Predict</a>
+    <a class="cta-pill" href="/predict">Sign in</a>
   </nav>
 
   <!-- HERO -->
@@ -358,6 +369,7 @@
   <footer>
     <div class="wrap">
       <div>© 2026 Redfooty India · EPL Predictor</div>
+      <div><a href="https://redfooty.com/" target="_blank" rel="noopener">About Redfooty</a></div>
       <div><a id="contact-link" href="#">Report an issue</a></div>
     </div>
   </footer>
@@ -386,7 +398,7 @@
 
     // --- render rules accordion from rules-data.js ---
     document.getElementById("rules-list").innerHTML = REDFOOTY_RULES.rulesSections.map((s, i) => `
-      <details class="rule-item" ${i === 0 ? "open" : ""}>
+      <details class="rule-item" name="rules-accordion" ${i === 0 ? "open" : ""}>
         <summary>${s.title}</summary>
         <div class="rule-body"><ul>${s.points.map(pt => `<li>${pt}</li>`).join("")}</ul></div>
       </details>

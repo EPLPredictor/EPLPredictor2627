@@ -575,7 +575,7 @@ function predictTab() {
   return strip + `
     <div class="eyebrow">Open fixtures</div>
     <select class="sel" onchange="setMd(this.value)">
-      ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Matchday ${m}</option>`).join("")}
+      ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Gameweek ${m}</option>`).join("")}
     </select>
     ${list.map(predictCard).join("")}`;
 }
@@ -628,10 +628,10 @@ function resultsTab() {
   return `
     <div class="eyebrow">Results</div>
     <select class="sel" onchange="setRmd(this.value)">
-      ${mds.map(m => `<option value="${m}" ${m === S.rmd ? "selected" : ""}>Matchday ${m}</option>`).join("")}
+      ${mds.map(m => `<option value="${m}" ${m === S.rmd ? "selected" : ""}>Gameweek ${m}</option>`).join("")}
     </select>
     <div class="card" style="display:flex;justify-content:space-between;align-items:center">
-      <div><div style="font-size:13px;font-weight:600">Matchday ${S.rmd}</div>
+      <div><div style="font-size:13px;font-weight:600">Gameweek ${S.rmd}</div>
         <div class="match-time">${mine.length} of ${list.length} predicted</div></div>
       <div style="text-align:right"><div class="lb-pts">${total}</div>
         <div class="match-time">points</div></div>
@@ -688,7 +688,7 @@ function rulesTab() {
   return `
     <div class="eyebrow">Official Rules</div>
     ${r.rulesSections.map(s => `
-      <details class="card" style="padding:0">
+      <details class="card" name="rules-accordion" style="padding:0">
         <summary style="padding:16px;cursor:pointer;font-weight:700;font-size:14px;list-style:none">${esc(s.title)}</summary>
         <ul style="padding:0 16px 16px 32px;margin:0">
           ${s.points.map(pt => `<li style="font-size:12.5px;color:#94a3b8;line-height:1.6;margin-bottom:6px">${esc(pt)}</li>`).join("")}
@@ -697,7 +697,7 @@ function rulesTab() {
     `).join("")}
 
     <div class="eyebrow" style="margin-top:6px">Prizes</div>
-    <details class="card" style="padding:0">
+    <details class="card" name="rules-accordion" style="padding:0">
       <summary style="padding:16px;cursor:pointer;font-weight:700;font-size:14px;list-style:none">Prize pool — tap to expand</summary>
       <div style="padding:0 16px 16px">
         ${r.prizes.map(p => `
@@ -737,7 +737,7 @@ function settingsTab() {
     </div>
     <div class="card" style="background:transparent;border:none;text-align:center;padding-top:0">
       <span class="match-time">Data synced ${S.syncAge == null ? "—" : Math.floor(S.syncAge / 60) + "m ago"}</span>
-      <div style="margin-top:8px"><a class="link" href="/">About Redfooty</a></div>
+      <div style="margin-top:8px"><a class="link" href="https://redfooty.com/" target="_blank" rel="noopener">About Redfooty</a></div>
     </div>`;
 }
 
