@@ -78,6 +78,7 @@ body{background:var(--ink);color:#f1f5f9;font-family:'Inter',system-ui,sans-seri
 .pick-btn{flex:1;background:transparent;border:1.5px solid var(--line);border-radius:10px;padding:9px 4px;cursor:pointer;font-family:inherit;color:var(--muted);text-align:center;transition:all .15s}
 .pick-btn:disabled{opacity:.5;cursor:default}
 .pick-label{font-size:12px;font-weight:700;line-height:1.25}
+.pick-pts{color:var(--gold);font-weight:800}
 .pick-active-blue{border-color:var(--teal);color:#2dd4bf;background:rgba(18,165,148,.1)}
 .pick-active-amber{border-color:var(--gold);color:var(--gold);background:rgba(216,169,60,.1)}
 .pred-row input{width:100%;background:var(--ink);border:1px solid var(--line);color:#f1f5f9;border-radius:10px;padding:10px;font-size:17px;font-weight:700;text-align:center;font-family:inherit}
@@ -112,7 +113,6 @@ body{background:var(--ink);color:#f1f5f9;font-family:'Inter',system-ui,sans-seri
 .sel:focus{outline:none;border-color:var(--crimson)}
 
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin:6px 0 10px}
-.scoring-hint{font-size:11px;color:var(--muted);margin:-6px 0 12px}
 .empty{text-align:center;padding:36px 16px;color:var(--muted);font-size:13px;line-height:1.6}
 
 .lb-row{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:8px}
@@ -570,7 +570,6 @@ function predictTab() {
 
   return strip + `
     <div class="eyebrow">Open fixtures</div>
-    <div class="scoring-hint">Correct win +${REDFOOTY_RULES.scoring.win} &middot; Correct draw +${REDFOOTY_RULES.scoring.draw}</div>
     <select class="sel" onchange="setMd(this.value)">
       ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Gameweek ${m}</option>`).join("")}
     </select>
@@ -579,9 +578,10 @@ function predictTab() {
 
 function pickBtn(f, side, label, active) {
   const accent = side === "D" ? "amber" : "blue";
+  const pts = side === "D" ? REDFOOTY_RULES.scoring.draw : REDFOOTY_RULES.scoring.win;
   return `<button class="pick-btn ${active ? "pick-active-" + accent : ""}"
             onclick="savePrediction(${f.id},'${side}')" ${S.busy ? "disabled" : ""}>
-            <div class="pick-label">${label}</div>
+            <div class="pick-label">${label} <span class="pick-pts">+${pts}</span></div>
           </button>`;
 }
 
