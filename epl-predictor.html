@@ -498,7 +498,7 @@ function resetScreen() {
 
 function shell() {
   const name = S.profile?.full_name || S.session.user.email;
-  const tabs = [["predict", "Predict"], ["results", "Results"], ["table", "Table"], ["rules", "Rules"], ["settings", "You"]];
+  const tabs = [["predict", "Predict"], ["results", "Results"], ["table", "Leaderboard"], ["rules", "Rules"], ["settings", "You"]];
   return `
     <div class="header">
       <div class="header-top">
