@@ -78,7 +78,6 @@ body{background:var(--ink);color:#f1f5f9;font-family:'Inter',system-ui,sans-seri
 .pick-btn{flex:1;background:transparent;border:1.5px solid var(--line);border-radius:10px;padding:9px 4px;cursor:pointer;font-family:inherit;color:var(--muted);text-align:center;transition:all .15s}
 .pick-btn:disabled{opacity:.5;cursor:default}
 .pick-label{font-size:12px;font-weight:700;line-height:1.25}
-.pick-pts{font-size:10px;margin-top:3px;opacity:.75;font-weight:600}
 .pick-active-blue{border-color:var(--teal);color:#2dd4bf;background:rgba(18,165,148,.1)}
 .pick-active-amber{border-color:var(--gold);color:var(--gold);background:rgba(216,169,60,.1)}
 .pred-row input{width:100%;background:var(--ink);border:1px solid var(--line);color:#f1f5f9;border-radius:10px;padding:10px;font-size:17px;font-weight:700;text-align:center;font-family:inherit}
@@ -113,6 +112,7 @@ body{background:var(--ink);color:#f1f5f9;font-family:'Inter',system-ui,sans-seri
 .sel:focus{outline:none;border-color:var(--crimson)}
 
 .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--teal);margin:6px 0 10px}
+.scoring-hint{font-size:11px;color:var(--muted);margin:-6px 0 12px}
 .empty{text-align:center;padding:36px 16px;color:var(--muted);font-size:13px;line-height:1.6}
 
 .lb-row{display:flex;align-items:center;gap:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px;margin-bottom:8px}
@@ -193,10 +193,6 @@ function points(p, f) {
   const actual = f.home_score > f.away_score ? "H" : f.home_score < f.away_score ? "A" : "D";
   if (p.pick !== actual) return 0;
   return actual === "D" ? 6 : 5;
-}
-
-function pickPreviewPoints(pick, f) {
-  return pick === "D" ? 6 : 5;
 }
 
 function pickLabel(pick, f) {
@@ -574,6 +570,7 @@ function predictTab() {
 
   return strip + `
     <div class="eyebrow">Open fixtures</div>
+    <div class="scoring-hint">Correct win +${REDFOOTY_RULES.scoring.win} &middot; Correct draw +${REDFOOTY_RULES.scoring.draw}</div>
     <select class="sel" onchange="setMd(this.value)">
       ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Gameweek ${m}</option>`).join("")}
     </select>
@@ -581,12 +578,10 @@ function predictTab() {
 }
 
 function pickBtn(f, side, label, active) {
-  const pts = pickPreviewPoints(side, f);
   const accent = side === "D" ? "amber" : "blue";
   return `<button class="pick-btn ${active ? "pick-active-" + accent : ""}"
             onclick="savePrediction(${f.id},'${side}')" ${S.busy ? "disabled" : ""}>
             <div class="pick-label">${label}</div>
-            <div class="pick-pts">+${pts} if right</div>
           </button>`;
 }
 
@@ -606,9 +601,9 @@ function predictCard(f) {
       <div class="team">${crest(f.away_crest, f.away_team)}<div class="team-name">${esc(f.away_team)}</div></div>
     </div>
     <div class="pred-row">
-      ${pickBtn(f, "H", esc(f.home_team) + " Win", p?.pick === "H")}
+      ${pickBtn(f, "H", "Win", p?.pick === "H")}
       ${pickBtn(f, "D", "Draw", p?.pick === "D")}
-      ${pickBtn(f, "A", esc(f.away_team) + " Win", p?.pick === "A")}
+      ${pickBtn(f, "A", "Win", p?.pick === "A")}
     </div>
   </div>`;
 }
