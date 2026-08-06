@@ -224,6 +224,19 @@
   footer .wrap{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
   footer a{text-decoration:underline;}
   footer a:hover{color:#fff;}
+  footer .footer-links{display:flex;gap:10px;flex-wrap:wrap;}
+
+  .pill-brand{
+    display:inline-block;background:var(--crimson);color:#fff;padding:8px 16px;
+    border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.2px;text-decoration:none;
+  }
+  footer a.pill-brand:hover{background:#a8172f;color:#fff;}
+  .pill-support{
+    display:inline-block;background:rgba(18,165,148,.14);color:var(--teal);padding:8px 16px;
+    border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.2px;text-decoration:none;
+    border:1px solid rgba(18,165,148,.35);
+  }
+  footer a.pill-support:hover{background:rgba(18,165,148,.24);color:var(--teal);}
 
   @media(max-width:760px){
     .prize-grid,.how-grid{grid-template-columns:1fr;}
@@ -369,8 +382,10 @@
   <footer>
     <div class="wrap">
       <div>© 2026 Redfooty India · EPL Predictor</div>
-      <div><a href="https://redfooty.com/" target="_blank" rel="noopener">About Redfooty</a></div>
-      <div><a id="contact-link" href="#">Report an issue</a></div>
+      <div class="footer-links">
+        <a class="pill-brand" href="https://redfooty.com/" target="_blank" rel="noopener">About Redfooty</a>
+        <a class="pill-support" id="contact-link" href="#">Report an issue</a>
+      </div>
     </div>
   </footer>
 
@@ -414,18 +429,23 @@
       `Predict at least ${REDFOOTY_RULES.eligibilityPct}% of matches completed so far to qualify for prizes — a rolling requirement, not a one-time target. Full rules cover ties, deadlines & disputes.`;
     document.getElementById("contact-link").href = `mailto:${REDFOOTY_RULES.contactEmail}?subject=Redfooty%20Predictor%20-%20Report%20an%20issue`;
 
-    // --- countdown to the next open fixture (falls back to a fixed date if the fetch fails) ---
+    // --- countdown to the next open fixture, advancing gameweek to
+    // gameweek all season instead of freezing after the first kickoff.
+    // Falls back to a fixed date + Gameweek 1 label only if the fetch
+    // itself fails (network issue), not as a normal mid-season state. ---
     const FALLBACK_KICKOFF = "2026-08-21T19:00:00Z";
+    let countdownTimer = null;
 
-    function startCountdown(targetIso) {
+    function startCountdown(targetIso, label) {
+      clearInterval(countdownTimer);
       const target = new Date(targetIso);
+      document.getElementById("countdown-label").textContent = label;
+
       function tick() {
         const ms = target - Date.now();
         if (ms <= 0) {
-          document.getElementById("countdown-label").textContent = "Season is live";
-          document.getElementById("cd-d").textContent = "0";
-          document.getElementById("cd-h").textContent = "0";
-          document.getElementById("cd-m").textContent = "0";
+          clearInterval(countdownTimer);
+          refreshCountdown(); // this fixture just kicked off - find the next one
           return;
         }
         const totalMin = Math.floor(ms / 60000);
@@ -437,23 +457,34 @@
         document.getElementById("cd-m").textContent = m;
       }
       tick();
-      setInterval(tick, 30000);
+      countdownTimer = setInterval(tick, 30000);
     }
 
-    (async function initCountdown() {
+    async function refreshCountdown() {
       try {
         const { data, error } = await sb.from("fixtures")
-          .select("kickoff_utc")
+          .select("kickoff_utc, matchday")
           .in("status", ["SCHEDULED", "TIMED"])
+          .gt("kickoff_utc", new Date().toISOString()) // never re-target an already-passed fixture
           .order("kickoff_utc")
           .limit(1);
-        if (error || !data || !data.length) throw error || new Error("no fixtures");
-        document.getElementById("countdown-label").textContent = "until Gameweek 1 kicks off";
-        startCountdown(data[0].kickoff_utc);
+        if (error) throw error;
+        if (!data || !data.length) {
+          clearInterval(countdownTimer);
+          document.getElementById("countdown-label").textContent =
+            "Season complete - see the final standings below";
+          document.getElementById("cd-d").textContent = "0";
+          document.getElementById("cd-h").textContent = "0";
+          document.getElementById("cd-m").textContent = "0";
+          return;
+        }
+        startCountdown(data[0].kickoff_utc, `Until Gameweek ${data[0].matchday} kicks off`);
       } catch (e) {
-        startCountdown(FALLBACK_KICKOFF);
+        startCountdown(FALLBACK_KICKOFF, "Until Gameweek 1 kicks off");
       }
-    })();
+    }
+
+    refreshCountdown();
   </script>
 
 </body>
