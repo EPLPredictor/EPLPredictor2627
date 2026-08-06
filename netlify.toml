@@ -54,3 +54,9 @@
   to = "/Landing_Page.html"
   status = 404
   force = true
+
+[[redirects]]
+  from = "/CLAUDE.md"
+  to = "/Landing_Page.html"
+  status = 404
+  force = true
