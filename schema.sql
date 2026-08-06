@@ -171,6 +171,16 @@ create table if not exists public.fixtures (
   synced_at   timestamptz not null default now()
 );
 
+-- `create table if not exists` above only creates these columns on a
+-- brand-new project — it's a no-op against a table that already
+-- existed before odds scoring was added, so an upgrade needs these
+-- explicitly or set_fixture_odds() below fails with "column does not
+-- exist". Harmless no-op on a fresh project where they're already
+-- there from the CREATE TABLE.
+alter table public.fixtures add column if not exists home_odds numeric;
+alter table public.fixtures add column if not exists draw_odds numeric;
+alter table public.fixtures add column if not exists away_odds numeric;
+
 create index if not exists fixtures_kickoff_idx  on public.fixtures (kickoff_utc);
 create index if not exists fixtures_matchday_idx on public.fixtures (matchday);
 create index if not exists fixtures_status_idx   on public.fixtures (status);

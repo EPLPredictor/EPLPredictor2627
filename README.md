@@ -190,9 +190,13 @@ via `points()`, for Results-tab badges) — if you change one, change both.
    for a 380-match season): https://the-odds-api.com/
 
    The response also includes `odds_debug` — check `matched` against `due_fixtures` the
-   first time this runs for real. The team-name mapping in `index.ts` (`ODDS_API_TO_FD`)
-   was written without a live API key to test against, so it may need fixing the first
-   time a fixture actually enters the 2-hour lock window and the odds don't match up.
+   first time a fixture actually enters the lock window. The team-name mapping in
+   `index.ts` (`ODDS_API_TO_FD`) was checked 06 Aug 2026 against a real Odds API response
+   compared to every distinct team name in the live `fixtures` table — all 20 clubs
+   matched exactly. That check ran before the season started (no fixture had entered the
+   lock window yet), so it's confirmed for team *names*, not yet for the live end-to-end
+   path — re-check `odds_debug` once a real fixture hits T-2h, and expect the mapping to
+   need a touch-up whenever a club is promoted/relegated between seasons.
 
    Then the reminder function (§11) — needs a Brevo **transactional API key**
    (`xkeysib-...`, from Brevo → SMTP & API → API Keys — this is a different credential

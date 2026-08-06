@@ -27,12 +27,14 @@ const ODDS_LOCK_HOURS = 2; // MUST match the interval in fixture_is_open() in sc
 
 // The Odds API's team names for EPL vs football-data.org's shortName
 // convention (the column this project actually stores in
-// fixtures.home_team/away_team). Best-effort mapping, NOT yet
-// confirmed against a live API response the way the old ClubElo
-// mapping was (that one was checked against real data before being
-// trusted — this one hasn't been able to be, yet, for lack of an API
-// key at write time). Verify this against a real `?force=1` run's
-// odds_debug output the first time it's used, and fix any misses.
+// fixtures.home_team/away_team). Confirmed 06 Aug 2026 by comparing a
+// live `GET /v4/sports/soccer_epl/odds` response against every
+// distinct team name in the live fixtures table — all 20 clubs
+// matched exactly, no misses. That was checked before any fixture had
+// actually entered the 2-hour lock window (season hadn't started),
+// so re-verify odds_debug.matched vs due_fixtures once real games are
+// close, in case The Odds API changes a name mid-season (promoted/
+// relegated clubs next season are the likeliest source of a miss).
 const ODDS_API_TO_FD: Record<string, string> = {
   "Arsenal": "Arsenal",
   "Aston Villa": "Aston Villa",
