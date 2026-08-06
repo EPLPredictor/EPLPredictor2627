@@ -20,7 +20,7 @@ schema.sql              the whole database: tables, RLS, kickoff lock, scoring, 
 cron.sql                pg_cron schedule template for both cron jobs (placeholders — see §4)
 index.ts                Edge Function: football-data.org -> fixtures table
 send-reminders.ts       Edge Function: daily reminder emails — see §11
-epl-predictor.html      the app itself — auth + 5 tabs (Predict/Results/Table/Rules/You)
+epl-predictor.html      the app itself — auth + 5 tabs (Predict/Results/Leaderboard/Rules/You)
 Landing_Page.html       public marketing/rules/prizes page, served at "/"
 rules-data.js           prizes + rules copy — single source of truth, loaded by BOTH
                          HTML pages (edit here, not in either HTML file, to change a
@@ -79,8 +79,8 @@ football-data.org  ──(cron, every 5 min)──▶  Edge Function  ──▶ 
                                                                        │
    browser ──── Supabase Auth (email OTP + password) ────────▶  predictions table
                                                                        │  RLS: insert/update
-                                                                       │  only while
-                                                                       │  kickoff_utc > now()
+                                                                       │  only while more than
+                                                                       │  2h to kickoff
                                                                        │  stores a pick: H/D/A
                                                                        ▼
                                                           score() → leaderboard view
@@ -98,8 +98,9 @@ wrong:
    the HTML form and again inside the trigger, since the trigger is the only thing
    standing between the public signup API and the table. Age, not date of birth — see
    the decisions log for why, and how "current age" stays accurate without storing one.
-2. **The kickoff lock is an RLS `WITH CHECK`**, not a disabled input. `fixture_is_open()`
-   reads `fixtures.kickoff_utc`. A direct REST POST after kickoff returns `42501`.
+2. **The lock is an RLS `WITH CHECK`**, not a disabled input. `fixture_is_open()` reads
+   `fixtures.kickoff_utc` and closes 2 hours before kickoff, not at kickoff — paired with
+   the odds freeze, see §3. A direct REST POST inside that window returns `42501`.
 3. **Points are derived, never written.** `score()` is an immutable SQL function;
    `leaderboard` is a view over `predictions ⋈ fixtures`. There is no `total_points`
    column to tamper with or to drift.
@@ -111,14 +112,33 @@ wrong:
 
 ## 3. Scoring and eligibility (current rules)
 
+Odds-based, revised 06 Aug 2026 — this project's fourth scoring formula (flat →
+standings-gap → ClubElo-probability → flat → odds; see §6 for why each earlier one was
+tried and dropped, and why odds is different).
+
 ```
-wrong pick        0
-correct draw      6
-correct win       5
+wrong pick                                0
+correct pick, odds locked for the fixture clamp(round(2 x odds), 4, 10)
+correct pick, no odds on file             6 for a draw, 5 for a win (flat fallback)
 ```
 
-Deliberately flat — no bonus for calling an upset. Two more elaborate formulas were
-tried and dropped; see §6 if you want the history.
+"No odds on file" covers two cases with the same fallback: the fixture hasn't hit its
+2-hours-before-kickoff freeze window yet, or the odds fetch genuinely failed. At odds
+2.5, a correct win scores exactly 5; at odds 3.0, a correct draw scores exactly 6 — the
+formula was deliberately anchored so it only meaningfully diverges from the old flat
+numbers where the odds say a pick was more or less obvious than a coin flip.
+
+**Predictions (and odds) lock 2 hours before kickoff, not at kickoff.** This is a
+deliberate pairing, not two independent settings: if odds froze early but predictions
+stayed open until kickoff, team news/lineups landing in that window could let someone
+predict on information newer than the frozen odds reflect. `ODDS_LOCK_HOURS` in
+`index.ts` and the `interval '2 hours'` in `fixture_is_open()` (`schema.sql`) must be
+changed together — they're not read from one shared source.
+
+One side effect worth knowing: the `read predictions` RLS policy also keys off
+`fixture_is_open()`, so other players' picks now become visible 2 hours before kickoff
+too, not exactly at kickoff. That's fine — once picks are locked, there's no remaining
+copy-risk in showing them a little earlier.
 
 **Prize eligibility:** a player must have predicted at least 75% of the matches that
 have **finished so far** — not gameweeks, and not a fixed season-long total. It's a
@@ -129,12 +149,13 @@ Restricting both sides to `status = 'FINISHED'` also automatically excludes post
 abandoned fixtures from the count — no special-case logic needed, since those never
 reach `FINISHED`. Before any match finishes, everyone is treated as eligible (100%)
 rather than dividing by zero. `get_leaderboard()` returns `matches_predicted`,
-`matches_completed`, `participation_pct`, and `eligible` per player; the Table tab in
+`matches_completed`, `participation_pct`, and `eligible` per player; the Leaderboard tab in
 `epl-predictor.html` renders all four. See `schema.sql` §5 for the exact logic.
 
-`public.score(pick, home_score, away_score)` is the authoritative implementation.
-`epl-predictor.html`'s JS `points()` duplicates it for per-match badge rendering — if
-you change one, change both.
+`public.score(pick, home_score, away_score, home_odds, draw_odds, away_odds)` is the
+authoritative implementation. `epl-predictor.html`'s JS `pointsForCorrectPick()`
+duplicates the same formula (used both for the Predict tab's live point preview and,
+via `points()`, for Results-tab badges) — if you change one, change both.
 
 ---
 
@@ -158,11 +179,20 @@ you change one, change both.
    supabase link --project-ref <ref>
    supabase secrets set FOOTBALL_DATA_TOKEN=<your-football-data-token>
    supabase secrets set SYNC_SECRET=<openssl rand -hex 24 output — save it>
+   supabase secrets set ODDS_API_KEY=<your-the-odds-api-key>
    supabase functions deploy sync-fixtures
    curl -i -X POST 'https://<ref>.functions.supabase.co/sync-fixtures?force=1' \
      -H "Authorization: Bearer <anon-key>" -H "x-sync-secret: <sync-secret>"
    ```
-   Expect `{"synced":380,...}`. Free token: https://www.football-data.org/client/register
+   Expect `{"synced":380,...}`. Free token: https://www.football-data.org/client/register.
+   Free odds key (500 credits/month — one `h2h`+`uk` call costs 1 credit, and the sync
+   only spends one when a fixture is actually due, so 500/month is comfortable headroom
+   for a 380-match season): https://the-odds-api.com/
+
+   The response also includes `odds_debug` — check `matched` against `due_fixtures` the
+   first time this runs for real. The team-name mapping in `index.ts` (`ODDS_API_TO_FD`)
+   was written without a live API key to test against, so it may need fixing the first
+   time a fixture actually enters the 2-hour lock window and the odds don't match up.
 
    Then the reminder function (§11) — needs a Brevo **transactional API key**
    (`xkeysib-...`, from Brevo → SMTP & API → API Keys — this is a different credential
@@ -196,13 +226,14 @@ Read this before changing anything — each row is a question someone will re-as
 | **Single HTML file, no framework** | No build step; redeploy = push to `main`. | Low now, higher past ~1000 lines — move to Vite then. |
 | **Fixtures cached in our own table** | 10 req/min upstream budget is shared; client-side fetching also exposes the token. | High — it's the spine of the design. |
 | **`leaderboard` as a view, exposed via `SECURITY DEFINER` RPC** | The view reads `profiles`, which is self-only under RLS, so a direct select returns one row. | Low. |
-| **Predictions hidden until kickoff** | Otherwise users copy each other. | Low — relax the read policy. |
+| **Predictions hidden until locked (2h before kickoff, not at kickoff — revised 06 Aug 2026)** | Otherwise users copy each other. The read policy keys off the same `fixture_is_open()` as the write policy, so it moved with the lock-time change below. | Low — relax the read policy. |
 | **No admin override tab** | An override that writes scores would defeat derived scoring. | Medium — reintroduces the tampering surface. |
 | **`TIMED` counts as open, alongside `SCHEDULED`** | football-data.org v4 uses `TIMED` once kickoff is confirmed. Treat only `SCHEDULED` as open and every fixture looks locked. | n/a — this is just correct. |
 | **Phone mandatory + unique, format-checked only** | A real 10-digit Indian mobile number is a cheap authenticity/anti-duplicate filter without paying for SMS verification. Doesn't prove the number receives texts. | Medium to add real SMS verification — needs a paid gateway. |
 | **Age (not date of birth) mandatory, 18+ enforced — revised 04 Aug 2026** | Compliance requirement for a contest with real cash prizes; unchanged. Originally collected as a full DOB, changed to a plain age input at the project owner's request. Neither is verified against real ID, so this doesn't weaken the gate — both are equally self-attested. "Current age" is derived (`age_at_signup` + full years since `created_at`), never stored, so it can't go stale without a birthdate on file. | Low to relax the 18+ threshold itself; **medium** to go back to DOB, since `profiles.dob` no longer exists — would need a real migration, not a revert. |
 | **Win/Draw/Loss picks, not exact scorelines** | Simpler format, matches an earlier predictor this team built. | High — touches `predictions`' shape, `score()`, the leaderboard view, the sync function, and the prediction UI. |
-| **Flat scoring (+5/+6/0), no upset bonus** | Two more elaborate formulas were tried and dropped — see §6. Simplicity and auditability won over rewarding upset calls. | Low to re-add a bonus in `score()` alone; **high** to bring back position/probability data, since those columns were removed, not just unused. |
+| **Odds-based scoring, flat as fallback only — revised 06 Aug 2026** | Flat (+5/+6/0) was the third formula, chosen for simplicity after two more elaborate ones were dropped — see §6. Superseded because the project owner wanted a correct pick's value to actually track how likely it was, using real bookmaker odds instead of a fixed number. Flat didn't go away: it's now the fallback for a fixture with no locked odds (either too early, or the odds fetch failed), so it's still load-bearing, just no longer the default path. | Low to change the multiplier/floor/ceiling in `score()`; **medium** to drop odds entirely and go back to pure flat, since that also means reverting `fixture_is_open()`'s lock time and `index.ts`'s odds-fetch step. |
+| **Odds lock paired with the prediction lock, both at T-2h before kickoff** | Freezing odds without also freezing predictions would let a late predictor use team news the frozen odds don't reflect. See §3 for the full reasoning. | Low-medium — `ODDS_LOCK_HOURS` in `index.ts` and the interval in `fixture_is_open()` (`schema.sql`) are two separate constants, kept in sync by hand, not a shared source. |
 | **75%-of-matches-completed-so-far eligibility, rolling — revised from an earlier fixed-38-gameweek version** | The fixed-denominator version (participation counted by gameweek, against a hardcoded 38) made "eligible" meaningless until late in the season, and didn't measure per-match commitment. Revised (04 Aug 2026) to a rolling window against matches actually finished so far. | Low — it's the join condition in one view. |
 | **`cron.sql` ships as a placeholder template, never a filled-in file** | An earlier version of this project committed a real `SYNC_SECRET` to git. Rotated once discovered; won't happen twice. | n/a — this is just correct. |
 | **Prizes/rules live in `rules-data.js`, not hardcoded in either HTML file** | Prizes are explicitly tentative (project owner, Aug 2026) and the exact rules text comes from `Terms_conditions_Plan.pdf` §1. One data file both pages load means an edit can't apply to only one of them. | Low — it's one file. |
@@ -210,12 +241,12 @@ Read this before changing anything — each row is a question someone will re-as
 
 ---
 
-## 6. Scoring history (why flat, not standings-gap or ClubElo)
+## 6. Scoring history (why odds, not flat, standings-gap, or ClubElo)
 
-Skip this section unless you're wondering why the schema doesn't have position or
-probability columns.
+Skip this section unless you're wondering why an earlier formula isn't the one running,
+or why the schema doesn't have position/probability columns.
 
-Two earlier formulas were built and both were removed, not just disabled:
+Four formulas total, in order tried:
 
 - **Standings-gap scoring.** Correct win scored more if the winner was ranked below the
   loser in the table at kickoff (an "upset bonus"), using `home_position`/
@@ -223,14 +254,26 @@ Two earlier formulas were built and both were removed, not just disabled:
 - **ClubElo-probability scoring.** Replaced the standings gap with a locked win/draw/
   loss probability pulled from ClubElo (free, no key), layered as: probability available
   → use it; else standings gap; else flat.
+- **Flat scoring (+5 win / +6 draw / 0 wrong, no upset bonus).** Both of the above were
+  reverted to this for simplicity and auditability — a fixed number is trivial to
+  explain to a player who asks "why did I only get 5 points." Ran as the live system
+  from initial launch until 06 Aug 2026.
+- **Odds-based scoring (current).** Reintroduces an upset bonus, but sourced from real
+  bookmaker odds (The Odds API) instead of the project's own standings/ClubElo data, and
+  capped to a narrow 4–10 range rather than left unbounded — see §3 for the exact
+  formula. The project owner's reasoning: flat was too blunt (a nailed-on favourite and
+  a coin-flip paid the same), but the two earlier upset-bonus attempts had been dropped
+  as over-engineered for a WDL format. Real odds sidestep that: no in-house probability
+  model to maintain, and the bonus tracks an external, auditable number instead of one
+  this project computed itself.
 
-Both were reverted to flat scoring, and — when this file replaced the old multi-file
-migration history — the columns, the freeze-functions, and the ~80 lines of Edge
-Function code fetching standings/ClubElo were deleted outright rather than left dormant.
-If upset-weighted scoring comes back, it's a rebuild: re-add the columns, the sync
-logic, and the layered `score()` function. Old git history (or the previous
-`HANDOVER_v5.md`, if you kept a copy) has the exact formulas if you want a starting
-point rather than designing from scratch.
+The standings-gap and ClubElo columns/functions were deleted outright when this file
+replaced the old multi-file migration history, rather than left dormant — so reviving
+either is a rebuild, not an uncomment: re-add the columns, the sync logic, and the
+layered `score()` function. Old git history (or the previous `HANDOVER_v5.md`, if you
+kept a copy) has the exact formulas if you want a starting point rather than designing
+from scratch. Flat scoring didn't suffer the same fate — it's still live code, just
+demoted to the fallback path (§3) for whenever a fixture has no locked odds.
 
 ---
 
@@ -238,15 +281,17 @@ point rather than designing from scratch.
 
 Run after any fresh deployment, before trusting it with real users:
 
-- **Past-kickoff fixture write → rejected.** Insert/update a prediction against a
-  fixture with `kickoff_utc < now()`. Expect `403`/`42501`.
-- **Future fixture write → succeeds.** Same call against an upcoming fixture. Expect
-  `201`/`204`.
+- **Locked fixture write → rejected.** Insert/update a prediction against a fixture
+  inside its 2-hour-before-kickoff lock window (or already past kickoff). Expect
+  `403`/`42501`.
+- **Open fixture write → succeeds.** Same call against a fixture more than 2 hours from
+  kickoff. Expect `201`/`204`.
 - **Direct write to `fixtures` → rejected**, `403`, "permission denied for table
   fixtures".
 - **`GET /rest/v1/profiles` with a user JWT → exactly one row**, the caller's own.
 - **Cross-account visibility** — account B's `GET /rest/v1/predictions` must not contain
-  account A's prediction on a *future* fixture, but must after kickoff.
+  account A's prediction on an *open* fixture (more than 2h to kickoff), but must once
+  that fixture has locked.
 - **Scoring matches by hand** — after one finished gameweek, compare `get_leaderboard()`
   against a manual count.
 - **Signup rejects under-18 and malformed phone numbers**, both from the app and via a
@@ -260,16 +305,17 @@ Run after any fresh deployment, before trusting it with real users:
   freeze. When rescheduled with a future date they become editable again and the old
   prediction survives. To wipe them instead, add a trigger on `fixtures` that deletes
   predictions when status becomes `POSTPONED`. Undecided — pick one deliberately.
-- **Sync is the single point of failure.** `fixtures.kickoff_utc` drives the lock. If
-  the cron dies, kickoff times go stale and a match could sit open after kickoff. The
-  app warns past 20 minutes of staleness via `sync_age_seconds()`. Don't ignore the
-  banner.
+- **Sync is the single point of failure.** `fixtures.kickoff_utc` drives both the lock
+  and the odds freeze. If the cron dies, kickoff times go stale and a match could sit
+  open past its 2-hour lock point, or even past kickoff. The app warns past 20 minutes
+  of staleness via `sync_age_seconds()`. Don't ignore the banner.
 - **No penalty shootouts** on football-data.org's free tier. Irrelevant for league play.
 - **Supabase pauses idle free projects** after roughly a week. The cron counts as
   activity.
-- **Scoring is duplicated.** SQL `score()` is authoritative; the JS `points()` in
-  `epl-predictor.html` renders per-match badges. Change both together, or drop the JS
-  copy and read points from an RPC instead.
+- **Scoring is duplicated.** SQL `score()` is authoritative; the JS `pointsForCorrectPick()`
+  in `epl-predictor.html` (used by `points()` for Results badges and by the Predict tab's
+  live point preview) duplicates the same odds-clamp-then-flat-fallback formula. Change
+  both together, or drop the JS copy and read points from an RPC instead.
 
 ---
 
@@ -307,7 +353,7 @@ keeps working unattended. Add a `season` column before you care about last year'
   overload. The scoring function doesn't change.
 - A `season` column on `fixtures` and `predictions`, so year two doesn't wipe year one.
 - Leaderboard filters — Overall / This Gameweek / Eligible Only — per the planning doc's
-  own site audit. The Table tab currently shows one combined view.
+  own site audit. The Leaderboard tab currently shows one combined view.
 
 ---
 

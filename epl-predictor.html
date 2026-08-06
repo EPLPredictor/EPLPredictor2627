@@ -160,6 +160,10 @@ const app = document.getElementById("app");
 
 const OPEN_STATUS = ["SCHEDULED", "TIMED"];
 const LIVE_STATUS = ["IN_PLAY", "PAUSED", "LIVE"];
+// Must match ODDS_LOCK_HOURS in the Edge Function and the interval in
+// fixture_is_open() in schema.sql - not read from a shared source, so
+// keep all three in sync by hand if this ever changes.
+const ODDS_LOCK_HOURS = 2;
 
 const S = {
   ready: false, session: null, profile: null,
@@ -180,6 +184,14 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
 const fmtKick = iso => new Date(iso).toLocaleString(undefined,
   { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
+// Predictions (and odds) lock ODDS_LOCK_HOURS before kickoff, not at
+// kickoff itself - see schema.sql §4 for why. This is the one place
+// that boundary is computed for display; fixture_is_open() in the
+// database is the one that's actually enforced.
+function lockTime(kickoffIso) {
+  return new Date(new Date(kickoffIso).getTime() - ODDS_LOCK_HOURS * 3600000);
+}
+
 function countdown(iso) {
   const ms = new Date(iso) - Date.now();
   if (ms <= 0) return "locked";
@@ -188,11 +200,24 @@ function countdown(iso) {
   return `${m}m ${Math.floor(ms / 1000) % 60}s`;
 }
 
+// Duplicates public.score()'s math in schema.sql - if you change one,
+// change both. Odds-based when the fixture has locked odds on file,
+// flat +5/+6 fallback otherwise (matches the SQL fallback exactly:
+// same column being null covers both "not locked yet" and "the odds
+// fetch failed").
+function pointsForCorrectPick(pick, f) {
+  const odds = pick === "H" ? f.home_odds : pick === "D" ? f.draw_odds : f.away_odds;
+  if (odds != null) {
+    return Math.min(Math.max(Math.round(2 * odds), 4), 10);
+  }
+  return pick === "D" ? REDFOOTY_RULES.scoring.draw : REDFOOTY_RULES.scoring.win;
+}
+
 function points(p, f) {
   if (!p || f.home_score == null || f.away_score == null) return 0;
   const actual = f.home_score > f.away_score ? "H" : f.home_score < f.away_score ? "A" : "D";
   if (p.pick !== actual) return 0;
-  return actual === "D" ? 6 : 5;
+  return pointsForCorrectPick(p.pick, f);
 }
 
 function pickLabel(pick, f) {
@@ -553,7 +578,7 @@ function liveStrip() {
 
 function predictTab() {
   const open = S.fixtures.filter(f =>
-    OPEN_STATUS.includes(f.status) && new Date(f.kickoff_utc) > new Date());
+    OPEN_STATUS.includes(f.status) && lockTime(f.kickoff_utc) > new Date());
 
   const strip = liveStrip();
 
@@ -561,7 +586,7 @@ function predictTab() {
     return strip + `<div class="empty">No fixtures yet.<br/>The sync job hasn't put anything in the table — check <code>cron.job_run_details</code>.</div>`;
   }
   if (!open.length) {
-    return strip + `<div class="empty">Nothing left to predict.<br/>Every remaining fixture has kicked off.</div>`;
+    return strip + `<div class="empty">Nothing left to predict.<br/>Every remaining fixture has locked.</div>`;
   }
 
   const mds = [...new Set(open.map(f => f.matchday))].sort((a, b) => a - b);
@@ -578,7 +603,7 @@ function predictTab() {
 
 function pickBtn(f, side, label, active) {
   const accent = side === "D" ? "amber" : "blue";
-  const pts = side === "D" ? REDFOOTY_RULES.scoring.draw : REDFOOTY_RULES.scoring.win;
+  const pts = pointsForCorrectPick(side, f);
   return `<button class="pick-btn ${active ? "pick-active-" + accent : ""}"
             onclick="savePrediction(${f.id},'${side}')" ${S.busy ? "disabled" : ""}>
             <div class="pick-label">${label} <span class="pick-pts">+${pts}</span></div>
@@ -587,12 +612,13 @@ function pickBtn(f, side, label, active) {
 
 function predictCard(f) {
   const p = S.preds[f.id];
-  const soon = new Date(f.kickoff_utc) - Date.now() < 3600000;
+  const lock = lockTime(f.kickoff_utc);
+  const soon = lock - Date.now() < 3600000;
   return `<div class="card">
     <div class="match-meta">
       <span class="match-time">${esc(fmtKick(f.kickoff_utc))}</span>
       <span class="badge ${soon ? "b-soon" : "b-off"}">
-        locks in <span data-ko="${esc(f.kickoff_utc)}">${countdown(f.kickoff_utc)}</span>
+        locks in <span data-ko="${esc(lock.toISOString())}">${countdown(lock)}</span>
       </span>
     </div>
     <div class="teams-row">

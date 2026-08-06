@@ -7,7 +7,14 @@
 --
 -- Reflects the CURRENT rules only:
 --   - Win/Draw/Loss picks (not scorelines)
---   - Flat scoring: correct win +5, correct draw +6, wrong 0
+--   - Odds-based scoring: clamp(round(2 x odds), 4, 10) for a correct
+--     pick when pre-match odds were frozen for that fixture; flat
+--     +5 win / +6 draw when they weren't (either the fixture hasn't
+--     hit its 2-hour-before-kickoff freeze window yet, or the odds
+--     fetch failed — same fallback covers both). See §5.
+--   - Predictions lock 2 hours before kickoff, not at kickoff — lines
+--     up with the odds freeze so nobody can pick on information newer
+--     than the frozen odds reflect. See §4.
 --   - Signup requires a verified-format Indian mobile number and an
 --     age of 18+ (stored as age_at_signup, not a date of birth — see
 --     §1), both enforced again in the trigger in case someone calls
@@ -16,12 +23,11 @@
 --     have finished SO FAR — a rolling window, not a fixed 38-gameweek
 --     denominator. See §5 below.
 --
--- This project previously tried standings-gap and ClubElo-probability
--- scoring (see git history / old HANDOVER_v5.md if you need the
--- archaeology) — deliberately removed, not just unused, when this
--- file was written. If you want that back, it's a rebuild, not a
--- toggle: this schema has no home_position/away_position/
--- home_win_prob/draw_prob/away_win_prob columns.
+-- This project has tried flat, standings-gap, ClubElo-probability,
+-- and now real-odds scoring (see README §6 and git history) — read
+-- the reasoning there before "simplifying" back to flat again; it's
+-- been tried twice already for reasons that stopped applying once
+-- real prizes and a real odds provider were both in the picture.
 -- ============================================================
 
 
@@ -159,6 +165,9 @@ create table if not exists public.fixtures (
   status      text not null,                 -- SCHEDULED | TIMED | IN_PLAY | PAUSED | FINISHED | POSTPONED | SUSPENDED | CANCELLED
   home_score  int,
   away_score  int,
+  home_odds   numeric,                       -- decimal odds, frozen ~2h before kickoff — see §4
+  draw_odds   numeric,
+  away_odds   numeric,
   synced_at   timestamptz not null default now()
 );
 
@@ -175,6 +184,29 @@ create policy "fixtures are public" on public.fixtures
 -- No write policy + no write grant. The sync job uses the
 -- service-role key, which bypasses RLS.
 revoke insert, update, delete on public.fixtures from anon, authenticated;
+
+
+-- Writer for the odds freeze — same reasoning as every other frozen-
+-- value writer in this project's history: a partial-column upsert
+-- fails against this table's NOT NULL columns, so this does a real
+-- UPDATE instead. Deliberately NOT security definer — it inherits
+-- the caller's own privileges, so even if EXECUTE were ever granted
+-- to anon/authenticated by accident, the UPDATE inside would still
+-- fail on the table-level revoke above. Only the service role
+-- (Edge Function) can actually use this in practice.
+create or replace function public.set_fixture_odds(rows jsonb)
+returns void
+language sql
+as $$
+  update public.fixtures f
+  set home_odds = r.home_odds,
+      draw_odds = r.draw_odds,
+      away_odds = r.away_odds
+  from jsonb_to_recordset(rows) as r(
+    id bigint, home_odds numeric, draw_odds numeric, away_odds numeric
+  )
+  where f.id = r.id;
+$$;
 
 
 -- ------------------------------------------------------------
@@ -210,7 +242,16 @@ create trigger predictions_touch
 
 
 -- ------------------------------------------------------------
--- 4. THE KICKOFF LOCK  (enforced by RLS, not the browser)
+-- 4. THE PREDICTION LOCK  (enforced by RLS, not the browser)
+--
+-- Locks 2 hours before kickoff, not at kickoff. This lines up
+-- deliberately with when odds freeze (see the Edge Function): if
+-- odds froze early but predictions stayed open until kickoff, team
+-- news/lineups dropping in that window could let someone predict on
+-- information newer than the frozen odds reflect. Locking both at
+-- the same moment closes that gap. ODDS_LOCK_HOURS in the Edge
+-- Function must match the constant below — they're not read from a
+-- shared source, so keep them in sync by hand if either changes.
 -- ------------------------------------------------------------
 
 create or replace function public.fixture_is_open(fid bigint)
@@ -224,7 +265,7 @@ as $$
     select 1
     from public.fixtures
     where id = fid
-      and kickoff_utc > now()
+      and kickoff_utc - interval '2 hours' > now()
       and status in ('SCHEDULED', 'TIMED')
   );
 $$;
@@ -253,9 +294,27 @@ create policy "read predictions" on public.predictions
 -- ------------------------------------------------------------
 -- 5. SCORING  (derived, never client-written) + ELIGIBILITY
 --
--- correct draw            +6
--- correct win (home/away) +5
--- wrong pick                0
+-- Odds-based, revised 06 Aug 2026 from flat +5/+6 — see README §6 for
+-- the full history (this project has now tried flat, standings-gap,
+-- ClubElo-probability, and odds; each revision's reasoning is logged
+-- there, read it before "simplifying" back to flat again).
+--
+--   correct pick, odds available   clamp(round(2 x odds), 4, 10)
+--   correct pick, odds missing     6 for a draw, 5 for a win (flat)
+--   wrong pick                     0
+--
+-- "Odds missing" covers two cases identically, on purpose: a fixture
+-- more than 2 hours from kickoff (odds haven't been frozen yet) and a
+-- fixture where the odds fetch genuinely failed. Same fallback, same
+-- column being null either way — no separate "did the API error"
+-- flag needed.
+--
+-- The floor/ceiling of 4-10 (not a wider range) is a deliberate
+-- choice, not the only valid one: at odds 2.5 a correct win scores
+-- exactly 5, and at odds 3.0 a correct draw scores exactly 6 - both
+-- match the old flat numbers exactly, so the new formula only
+-- meaningfully diverges from the old one where the odds actually say
+-- the pick was more or less obvious than a coin flip.
 --
 -- Eligibility is 75% of MATCHES, not gameweeks, on a ROLLING basis —
 -- deliberately revised from an earlier fixed-38-gameweek version (see
@@ -278,7 +337,14 @@ create policy "read predictions" on public.predictions
 -- flagging players "not eligible" before there's any data.
 -- ------------------------------------------------------------
 
-create or replace function public.score(pick text, hs int, aws int)
+drop view if exists public.leaderboard cascade;
+drop function if exists public.get_leaderboard();
+drop function if exists public.score(text, int, int);
+
+create or replace function public.score(
+  pick text, hs int, aws int,
+  home_odds numeric, draw_odds numeric, away_odds numeric
+)
 returns int
 language sql
 immutable
@@ -286,8 +352,12 @@ as $$
   select case
     when pick is null or hs is null or aws is null then 0
     when pick <> (case when hs > aws then 'H' when hs < aws then 'A' else 'D' end) then 0
-    when hs = aws then 6   -- correct draw
-    else 5                 -- correct win (home or away)
+    when (case pick when 'H' then home_odds when 'D' then draw_odds when 'A' then away_odds end) is not null
+      then least(greatest(
+        round(2 * (case pick when 'H' then home_odds when 'D' then draw_odds when 'A' then away_odds end)),
+        4), 10)::int
+    when hs = aws then 6   -- correct draw, no odds on file — flat fallback
+    else 5                 -- correct win, no odds on file — flat fallback
   end;
 $$;
 
@@ -297,7 +367,7 @@ select
   p.id        as user_id,
   p.full_name,
   coalesce(sum(
-    public.score(pr.pick, f.home_score, f.away_score)
+    public.score(pr.pick, f.home_score, f.away_score, f.home_odds, f.draw_odds, f.away_odds)
   ), 0)::bigint as points,
   count(f.id) filter (
     where pr.pick = (case when f.home_score > f.away_score then 'H'
@@ -314,7 +384,7 @@ select
   end as eligible,
   rank() over (
     order by coalesce(sum(
-      public.score(pr.pick, f.home_score, f.away_score)
+      public.score(pr.pick, f.home_score, f.away_score, f.home_odds, f.draw_odds, f.away_odds)
     ), 0) desc
   )::bigint   as rank
 from public.profiles p
@@ -486,9 +556,13 @@ grant execute on function public.sync_age_seconds()      to anon, authenticated;
 -- where table_schema='public' and column_name ilike '%password%';
 -- -- 0 rows, always
 
--- select public.score('H', 2, 0);  -- expect 5
--- select public.score('D', 1, 1);  -- expect 6
--- select public.score('A', 2, 0);  -- expect 0 (wrong pick)
+-- select public.score('H', 2, 0, null, null, null);        -- expect 5  (no odds, flat fallback)
+-- select public.score('D', 1, 1, null, null, null);        -- expect 6  (no odds, flat fallback)
+-- select public.score('A', 2, 0, null, null, null);        -- expect 0  (wrong pick)
+-- select public.score('H', 2, 0, 1.57, 4.0, 5.5);          -- expect 4  (favorite, floor)
+-- select public.score('A', 0, 2, 1.57, 4.0, 5.5);          -- expect 10 (underdog upset, ceiling)
+-- select public.score('D', 1, 1, 1.57, 4.0, 5.5);          -- expect 8  (correct draw, odds-based)
+-- select public.score('H', 2, 0, 2.5, 3.0, 3.0);           -- expect 5  (odds=2.5 exactly matches flat)
 
 -- select * from get_leaderboard();
 -- -- expect matches_predicted/matches_completed/participation_pct/eligible present

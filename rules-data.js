@@ -10,7 +10,18 @@
 const REDFOOTY_RULES = {
   season: "2026/27",
   eligibilityPct: 75, // of matches completed so far — a rolling window, not a fixed season total
+  lockHours: 2, // predictions + odds both lock this many hours before kickoff
+  // Fallback scoring when a fixture has no locked odds (either it hasn't hit
+  // the lockHours window yet, or the odds fetch failed) — same numbers as
+  // the flat system this replaced, still used as the safety net.
   scoring: { win: 5, draw: 6, wrong: 0 },
+  // Odds-based scoring, used whenever a fixture has locked odds:
+  // clamp(round(multiplier x odds), floor, ceiling). At odds 2.5 a correct
+  // win scores exactly `scoring.win` (5); at odds 3.0 a correct draw scores
+  // exactly `scoring.draw` (6) — the two systems agree exactly at a
+  // coin-flip and only diverge where the odds say a pick was more or less
+  // obvious than that.
+  oddsFormula: { multiplier: 2, floor: 4, ceiling: 10 },
   contactEmail: "predictorepl@gmail.com",
 
   prizes: [
@@ -46,10 +57,11 @@ const REDFOOTY_RULES = {
       title: "How Scoring Works",
       points: [
         "Each fixture offers three outcomes to predict: Home Win, Draw, Away Win.",
-        "Correct result (home or away win): +5 points.",
-        "Correct draw: +6 points — weighted higher, since draws are statistically harder to call.",
-        "Incorrect prediction: 0 points. There is no negative scoring.",
-        "Predictions lock at kickoff for each fixture and cannot be changed after that point.",
+        "Points are based on real bookmaker odds, frozen 2 hours before kickoff: the less likely your correct pick was, the more it's worth. Calling a heavy favourite correctly is worth less than calling a genuine upset.",
+        "Concretely: a correct pick scores between 4 and 10 points, scaled to the odds at freeze time. A coin-flip pick (odds around 2.5–3.0) scores close to the old flat 5/6 — the scale only really diverges from that for picks that were clearly more or less likely than even.",
+        "If odds aren't available for a fixture (too early before kickoff, or a data hiccup), scoring falls back to a flat +5 for a correct win, +6 for a correct draw — the same numbers this project used before switching to odds.",
+        "Incorrect prediction: 0 points, always. There is no negative scoring.",
+        "Predictions lock 2 hours before kickoff, not at kickoff — see Prediction Deadlines below for why.",
       ],
     },
     {
@@ -82,8 +94,9 @@ const REDFOOTY_RULES = {
     {
       title: "Prediction Deadlines",
       points: [
-        "Each fixture's predictions lock at its official kickoff time (IST).",
-        "The app shows a live countdown per fixture — no predictions are accepted after lock, no exceptions for missed deadlines.",
+        "Each fixture's predictions lock 2 hours before its official kickoff time (IST) — not at kickoff itself.",
+        "That's deliberate, not a buffer for buffer's sake: match odds also freeze at the same 2-hour mark, and locking predictions at a different time would let someone pick using information (team news, lineups) that's newer than the odds their points are based on.",
+        "The app shows a live countdown per fixture to that 2-hour mark — no predictions are accepted after lock, no exceptions for missed deadlines.",
       ],
     },
     {
