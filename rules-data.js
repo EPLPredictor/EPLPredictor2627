@@ -10,17 +10,24 @@
 const REDFOOTY_RULES = {
   season: "2026/27",
   eligibilityPct: 75, // of matches completed so far — a rolling window, not a fixed season total
-  lockHours: 2, // predictions + odds both lock this many hours before kickoff
-  // Fallback scoring when a fixture has no locked odds (either it hasn't hit
-  // the lockHours window yet, or the odds fetch failed) — same numbers as
+  predictionLockHours: 2, // predictions close this many hours before kickoff
+  // Revised 06 Aug 2026: the odds freeze and the prediction lock are two
+  // separate timers now, not one. Odds go final 24h out, giving a long
+  // stable window before the 2h prediction lock; before that 24h freeze,
+  // the app shows a clearly-marked (~) indicative estimate instead of
+  // nothing. See "How Scoring Works" below for the full explanation.
+  oddsFreezeHours: 24,
+  // Fallback scoring when a fixture has no odds data at all yet (too far
+  // out for even an estimate, or the odds fetch failed) — same numbers as
   // the flat system this replaced, still used as the safety net.
   scoring: { win: 5, draw: 6, wrong: 0 },
-  // Odds-based scoring, used whenever a fixture has locked odds:
-  // clamp(round(multiplier x odds), floor, ceiling). At odds 2.5 a correct
-  // win scores exactly `scoring.win` (5); at odds 3.0 a correct draw scores
-  // exactly `scoring.draw` (6) — the two systems agree exactly at a
-  // coin-flip and only diverge where the odds say a pick was more or less
-  // obvious than that.
+  // Odds-based scoring, used once a fixture has final (or, for the ~
+  // estimate, preview) odds on file: clamp(round(multiplier x odds),
+  // floor, ceiling). At odds 2.5 a correct win scores exactly
+  // `scoring.win` (5); at odds 3.0 a correct draw scores exactly
+  // `scoring.draw` (6) — the two systems agree exactly at a coin-flip and
+  // only diverge where the odds say a pick was more or less obvious than
+  // that.
   oddsFormula: { multiplier: 2, floor: 4, ceiling: 10 },
   contactEmail: "predictorepl@gmail.com",
 
@@ -57,11 +64,13 @@ const REDFOOTY_RULES = {
       title: "How Scoring Works",
       points: [
         "Each fixture offers three outcomes to predict: Home Win, Draw, Away Win.",
-        "Points are based on real bookmaker odds, frozen 2 hours before kickoff: the less likely your correct pick was, the more it's worth. Calling a heavy favourite correctly is worth less than calling a genuine upset.",
-        "Concretely: a correct pick scores between 4 and 10 points, scaled to the odds at freeze time. A coin-flip pick (odds around 2.5–3.0) scores close to the old flat 5/6 — the scale only really diverges from that for picks that were clearly more or less likely than even.",
-        "If odds aren't available for a fixture (too early before kickoff, or a data hiccup), scoring falls back to a flat +5 for a correct win, +6 for a correct draw — the same numbers this project used before switching to odds.",
+        "Points are based on real bookmaker odds: the less likely your correct pick was, the more it's worth. Calling a heavy favourite correctly is worth less than calling a genuine upset. A correct pick scores between 4 and 10 points once odds are final for that fixture.",
+        "Odds go final (frozen, permanent) 24 hours before kickoff — not at the same moment predictions close. Once final, the point value shown is exactly what you'll be scored on if you're right, and it will not change again.",
+        "Before that 24-hour mark, the app shows a point value with a ~ in front of it (like ~7) — an estimate, not a promise. It reflects the current market where real odds are already available, or a flat placeholder where they aren't yet, and it can move as the real odds move, right up until it freezes at the 24-hour mark. Predicting on a ~ value means accepting the final number may differ once it freezes — that's the deal, stated plainly.",
+        "Why estimate at all instead of just freezing odds right away? Bookmaker odds are least reliable days out and most reliable close to kickoff — freezing too early would lock in a worse number for everyone. The 24-hour window is a deliberate middle ground: real, current information as early as it's meaningfully available, without pretending a week-out number is final when it can't be.",
+        "If a fixture has no odds data on file at all (nothing from the market yet, or a fetch failure), scoring falls back to a flat +5 for a correct win, +6 for a correct draw — the same numbers this project used before switching to odds. This fallback is itself shown with a ~ before the 24-hour freeze, same as any other estimate.",
         "Incorrect prediction: 0 points, always. There is no negative scoring.",
-        "Predictions lock 2 hours before kickoff, not at kickoff — see Prediction Deadlines below for why.",
+        "Predictions stay open until 2 hours before kickoff — a separate deadline from the 24-hour odds freeze, see Prediction Deadlines below.",
       ],
     },
     {
@@ -94,8 +103,8 @@ const REDFOOTY_RULES = {
     {
       title: "Prediction Deadlines",
       points: [
-        "Each fixture's predictions lock 2 hours before its official kickoff time (IST) — not at kickoff itself.",
-        "That's deliberate, not a buffer for buffer's sake: match odds also freeze at the same 2-hour mark, and locking predictions at a different time would let someone pick using information (team news, lineups) that's newer than the odds their points are based on.",
+        "Each fixture's predictions lock 2 hours before its official kickoff time (IST) — not at kickoff itself, and not at the same moment odds go final (see How Scoring Works above; that happens separately, 24 hours out).",
+        "The 2-hour cutoff mainly closes the window before official starting lineups are typically confirmed, so nobody's predicting with knowledge of the actual XI. It's the same deadline regardless of when a fixture's odds froze.",
         "The app shows a live countdown per fixture to that 2-hour mark — no predictions are accepted after lock, no exceptions for missed deadlines.",
       ],
     },

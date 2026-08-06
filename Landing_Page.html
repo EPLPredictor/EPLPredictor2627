@@ -294,7 +294,7 @@
         <div class="how-step">
           <div class="how-num">02</div>
           <h3>Predict each gameweek</h3>
-          <p id="scoring-copy">Pick Win / Draw / Loss for every fixture before it locks, 2 hours before kickoff. Points are based on real odds — the less likely your correct pick was, the more it's worth.</p>
+          <p id="scoring-copy">Pick Win / Draw / Loss for every fixture up to 2 hours before kickoff. Points are based on real odds, final 24 hours out — the less likely your correct pick was, the more it's worth.</p>
         </div>
         <div class="how-step">
           <div class="how-num">03</div>
@@ -407,7 +407,7 @@
     // --- fill in dynamic numbers so copy never drifts from rules-data.js ---
     document.getElementById("season-tag-text").textContent = "SEASON " + REDFOOTY_RULES.season;
     document.getElementById("scoring-copy").textContent =
-      `Pick Win / Draw / Loss for every fixture before it locks, ${REDFOOTY_RULES.lockHours} hours before kickoff. Points are based on real odds (${REDFOOTY_RULES.oddsFormula.floor}-${REDFOOTY_RULES.oddsFormula.ceiling}) — the less likely your correct pick was, the more it's worth.`;
+      `Pick Win / Draw / Loss for every fixture up to ${REDFOOTY_RULES.predictionLockHours} hours before kickoff. Points are based on real odds (${REDFOOTY_RULES.oddsFormula.floor}-${REDFOOTY_RULES.oddsFormula.ceiling}), final ${REDFOOTY_RULES.oddsFreezeHours} hours out — the less likely your correct pick was, the more it's worth.`;
     document.getElementById("eligibility-copy").textContent =
       `Points add up all season. Predict at least ${REDFOOTY_RULES.eligibilityPct}% of matches played so far to stay eligible for prizes.`;
     document.getElementById("eligibility-strip-copy").textContent =

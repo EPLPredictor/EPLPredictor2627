@@ -79,6 +79,7 @@ body{background:var(--ink);color:#f1f5f9;font-family:'Inter',system-ui,sans-seri
 .pick-btn:disabled{opacity:.5;cursor:default}
 .pick-label{font-size:12px;font-weight:700;line-height:1.25}
 .pick-pts{color:var(--gold);font-weight:800}
+.pick-pts-preview{color:var(--muted);font-weight:700;font-style:italic}
 .pick-active-blue{border-color:var(--teal);color:#2dd4bf;background:rgba(18,165,148,.1)}
 .pick-active-amber{border-color:var(--gold);color:var(--gold);background:rgba(216,169,60,.1)}
 .pred-row input{width:100%;background:var(--ink);border:1px solid var(--line);color:#f1f5f9;border-radius:10px;padding:10px;font-size:17px;font-weight:700;text-align:center;font-family:inherit}
@@ -160,10 +161,11 @@ const app = document.getElementById("app");
 
 const OPEN_STATUS = ["SCHEDULED", "TIMED"];
 const LIVE_STATUS = ["IN_PLAY", "PAUSED", "LIVE"];
-// Must match ODDS_LOCK_HOURS in the Edge Function and the interval in
-// fixture_is_open() in schema.sql - not read from a shared source, so
-// keep all three in sync by hand if this ever changes.
-const ODDS_LOCK_HOURS = 2;
+// Must match the interval in fixture_is_open() in schema.sql - not
+// read from a shared source, so keep both in sync by hand if this
+// ever changes. Deliberately NOT tied to odds anymore (revised 06 Aug
+// 2026) - odds freeze separately, 24h out, see previewPointsForPick().
+const PREDICTION_LOCK_HOURS = 2;
 
 const S = {
   ready: false, session: null, profile: null,
@@ -184,12 +186,12 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
 const fmtKick = iso => new Date(iso).toLocaleString(undefined,
   { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
-// Predictions (and odds) lock ODDS_LOCK_HOURS before kickoff, not at
+// Predictions lock PREDICTION_LOCK_HOURS before kickoff, not at
 // kickoff itself - see schema.sql §4 for why. This is the one place
 // that boundary is computed for display; fixture_is_open() in the
 // database is the one that's actually enforced.
 function lockTime(kickoffIso) {
-  return new Date(new Date(kickoffIso).getTime() - ODDS_LOCK_HOURS * 3600000);
+  return new Date(new Date(kickoffIso).getTime() - PREDICTION_LOCK_HOURS * 3600000);
 }
 
 function countdown(iso) {
@@ -218,6 +220,22 @@ function points(p, f) {
   const actual = f.home_score > f.away_score ? "H" : f.home_score < f.away_score ? "A" : "D";
   if (p.pick !== actual) return 0;
   return pointsForCorrectPick(p.pick, f);
+}
+
+// DISPLAY only - never used for scoring. Layers the indicative
+// preview odds on top of pointsForCorrectPick's frozen-or-flat logic,
+// purely so the Predict tab has something better than a flat number
+// to show for a fixture that's still more than 24h out. `final:
+// false` means the value shown can still change - the UI must mark
+// it (~) rather than presenting it as a real point value.
+function previewPointsForPick(pick, f) {
+  const frozen = pick === "H" ? f.home_odds : pick === "D" ? f.draw_odds : f.away_odds;
+  if (frozen != null) return { pts: pointsForCorrectPick(pick, f), final: true };
+  const preview = pick === "H" ? f.preview_home_odds : pick === "D" ? f.preview_draw_odds : f.preview_away_odds;
+  if (preview != null) {
+    return { pts: Math.min(Math.max(Math.round(2 * preview), 4), 10), final: false };
+  }
+  return { pts: pointsForCorrectPick(pick, f), final: false };
 }
 
 function pickLabel(pick, f) {
@@ -593,20 +611,27 @@ function predictTab() {
   if (S.md == null || !mds.includes(S.md)) S.md = mds[0];
   const list = open.filter(f => f.matchday === S.md);
 
+  const hasPreview = list.some(f => f.home_odds == null);
+  const previewBanner = hasPreview
+    ? `<div class="banner banner-warn">Points marked <strong>~</strong> are estimates and will change. They freeze into final values 24 hours before kickoff.</div>`
+    : "";
+
   return strip + `
     <div class="eyebrow">Open fixtures</div>
     <select class="sel" onchange="setMd(this.value)">
       ${mds.map(m => `<option value="${m}" ${m === S.md ? "selected" : ""}>Gameweek ${m}</option>`).join("")}
     </select>
+    ${previewBanner}
     ${list.map(predictCard).join("")}`;
 }
 
 function pickBtn(f, side, label, active) {
   const accent = side === "D" ? "amber" : "blue";
-  const pts = pointsForCorrectPick(side, f);
+  const { pts, final } = previewPointsForPick(side, f);
+  const ptsLabel = final ? `+${pts}` : `~${pts}`;
   return `<button class="pick-btn ${active ? "pick-active-" + accent : ""}"
             onclick="savePrediction(${f.id},'${side}')" ${S.busy ? "disabled" : ""}>
-            <div class="pick-label">${label} <span class="pick-pts">+${pts}</span></div>
+            <div class="pick-label">${label} <span class="pick-pts${final ? "" : " pick-pts-preview"}">${ptsLabel}</span></div>
           </button>`;
 }
 

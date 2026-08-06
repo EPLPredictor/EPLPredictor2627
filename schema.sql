@@ -8,13 +8,17 @@
 -- Reflects the CURRENT rules only:
 --   - Win/Draw/Loss picks (not scorelines)
 --   - Odds-based scoring: clamp(round(2 x odds), 4, 10) for a correct
---     pick when pre-match odds were frozen for that fixture; flat
---     +5 win / +6 draw when they weren't (either the fixture hasn't
---     hit its 2-hour-before-kickoff freeze window yet, or the odds
---     fetch failed — same fallback covers both). See §5.
---   - Predictions lock 2 hours before kickoff, not at kickoff — lines
---     up with the odds freeze so nobody can pick on information newer
---     than the frozen odds reflect. See §4.
+--     pick once real odds are frozen for that fixture (24h before
+--     kickoff); flat +5 win / +6 draw when they aren't yet (or the
+--     odds fetch failed — same fallback covers both). See §5.
+--   - Before that 24h freeze, the app shows an INDICATIVE preview
+--     value (~ prefixed, refreshed every few hours, real market data
+--     when available or the same flat number otherwise) so a fixture
+--     never shows literally nothing — but this preview is never used
+--     for scoring, only display. See §4.
+--   - Predictions lock 2 hours before kickoff — a separate timer from
+--     the odds freeze above, not the same moment. See §4 for why
+--     they're deliberately decoupled now (revised 06 Aug 2026).
 --   - Signup requires a verified-format Indian mobile number and an
 --     age of 18+ (stored as age_at_signup, not a date of birth — see
 --     §1), both enforced again in the trigger in case someone calls
@@ -165,9 +169,13 @@ create table if not exists public.fixtures (
   status      text not null,                 -- SCHEDULED | TIMED | IN_PLAY | PAUSED | FINISHED | POSTPONED | SUSPENDED | CANCELLED
   home_score  int,
   away_score  int,
-  home_odds   numeric,                       -- decimal odds, frozen ~2h before kickoff — see §4
+  home_odds   numeric,                       -- FINAL odds, frozen ~24h before kickoff, never touched again — see §4
   draw_odds   numeric,
   away_odds   numeric,
+  preview_home_odds numeric,                 -- INDICATIVE odds, refreshed every few hours until the freeze above — see §4
+  preview_draw_odds numeric,
+  preview_away_odds numeric,
+  preview_synced_at timestamptz,             -- throttles the preview refresh; never used for scoring
   synced_at   timestamptz not null default now()
 );
 
@@ -180,6 +188,10 @@ create table if not exists public.fixtures (
 alter table public.fixtures add column if not exists home_odds numeric;
 alter table public.fixtures add column if not exists draw_odds numeric;
 alter table public.fixtures add column if not exists away_odds numeric;
+alter table public.fixtures add column if not exists preview_home_odds numeric;
+alter table public.fixtures add column if not exists preview_draw_odds numeric;
+alter table public.fixtures add column if not exists preview_away_odds numeric;
+alter table public.fixtures add column if not exists preview_synced_at timestamptz;
 
 create index if not exists fixtures_kickoff_idx  on public.fixtures (kickoff_utc);
 create index if not exists fixtures_matchday_idx on public.fixtures (matchday);
@@ -212,6 +224,30 @@ as $$
   set home_odds = r.home_odds,
       draw_odds = r.draw_odds,
       away_odds = r.away_odds
+  from jsonb_to_recordset(rows) as r(
+    id bigint, home_odds numeric, draw_odds numeric, away_odds numeric
+  )
+  where f.id = r.id;
+$$;
+
+
+-- Writer for the INDICATIVE preview odds — same not-security-definer
+-- reasoning as set_fixture_odds above (a table-level revoke on
+-- fixtures protects this even though EXECUTE gets auto-granted to
+-- anon/authenticated by Supabase's defaults). Unlike set_fixture_odds,
+-- this is meant to be called repeatedly — every refresh cycle
+-- overwrites the previous preview value — so there's no "only if
+-- null" guard here; the caller (the sync Edge Function) decides when
+-- a fixture is due for a refresh, not this function.
+create or replace function public.set_fixture_preview_odds(rows jsonb)
+returns void
+language sql
+as $$
+  update public.fixtures f
+  set preview_home_odds = r.home_odds,
+      preview_draw_odds = r.draw_odds,
+      preview_away_odds = r.away_odds,
+      preview_synced_at = now()
   from jsonb_to_recordset(rows) as r(
     id bigint, home_odds numeric, draw_odds numeric, away_odds numeric
   )
@@ -254,14 +290,18 @@ create trigger predictions_touch
 -- ------------------------------------------------------------
 -- 4. THE PREDICTION LOCK  (enforced by RLS, not the browser)
 --
--- Locks 2 hours before kickoff, not at kickoff. This lines up
--- deliberately with when odds freeze (see the Edge Function): if
--- odds froze early but predictions stayed open until kickoff, team
--- news/lineups dropping in that window could let someone predict on
--- information newer than the frozen odds reflect. Locking both at
--- the same moment closes that gap. ODDS_LOCK_HOURS in the Edge
--- Function must match the constant below — they're not read from a
--- shared source, so keep them in sync by hand if either changes.
+-- Locks 2 hours before kickoff, not at kickoff — mainly to close off
+-- picks made after starting lineups are typically confirmed. This is
+-- now a SEPARATE timer from the odds freeze (revised 06 Aug 2026):
+-- odds freeze 24 hours before kickoff (ODDS_FREEZE_HOURS in the Edge
+-- Function), a full 22 hours before predictions actually close, so
+-- players get a long, stable window to decide against a real, final
+-- number instead of a 2-hour scramble. Between "odds available" and
+-- "odds frozen", a fixture shows an indicative preview value instead
+-- (preview_home_odds etc., refreshed every few hours, never used for
+-- scoring) — see README §3 for the full reasoning on why an
+-- unfrozen, clearly-marked estimate is preferable to either a fixed
+-- flat number or no number at all for a fixture more than a day out.
 -- ------------------------------------------------------------
 
 create or replace function public.fixture_is_open(fid bigint)
@@ -314,10 +354,11 @@ create policy "read predictions" on public.predictions
 --   wrong pick                     0
 --
 -- "Odds missing" covers two cases identically, on purpose: a fixture
--- more than 2 hours from kickoff (odds haven't been frozen yet) and a
--- fixture where the odds fetch genuinely failed. Same fallback, same
--- column being null either way — no separate "did the API error"
--- flag needed.
+-- more than 24 hours from kickoff (odds haven't been frozen yet - it
+-- may still be showing a `~` preview on the frontend, but that's a
+-- display-only value this function never sees) and a fixture where
+-- the odds fetch genuinely failed. Same fallback, same column being
+-- null either way — no separate "did the API error" flag needed.
 --
 -- The floor/ceiling of 4-10 (not a wider range) is a deliberate
 -- choice, not the only valid one: at odds 2.5 a correct win scores
@@ -576,3 +617,14 @@ grant execute on function public.sync_age_seconds()      to anon, authenticated;
 
 -- select * from get_leaderboard();
 -- -- expect matches_predicted/matches_completed/participation_pct/eligible present
+
+-- select column_name from information_schema.columns
+-- where table_schema='public' and table_name='fixtures' and column_name like 'preview%';
+-- -- preview_home_odds, preview_draw_odds, preview_away_odds, preview_synced_at
+
+-- select grantee, privilege_type from information_schema.routine_privileges
+-- where routine_name = 'set_fixture_preview_odds';
+-- -- anon/authenticated will show EXECUTE (Supabase's default grant) - that's expected and
+-- -- safe, since the UPDATE inside still needs table-level UPDATE on fixtures, which is
+-- -- revoked from anon/authenticated. Confirm with a real anon-key RPC call if in doubt,
+-- -- same as set_fixture_odds - never trust the grant list alone, see §8.

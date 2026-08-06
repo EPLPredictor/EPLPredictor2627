@@ -99,8 +99,9 @@ wrong:
    standing between the public signup API and the table. Age, not date of birth — see
    the decisions log for why, and how "current age" stays accurate without storing one.
 2. **The lock is an RLS `WITH CHECK`**, not a disabled input. `fixture_is_open()` reads
-   `fixtures.kickoff_utc` and closes 2 hours before kickoff, not at kickoff — paired with
-   the odds freeze, see §3. A direct REST POST inside that window returns `42501`.
+   `fixtures.kickoff_utc` and closes 2 hours before kickoff, not at kickoff — a separate
+   timer from the odds freeze, see §3. A direct REST POST inside that window returns
+   `42501`.
 3. **Points are derived, never written.** `score()` is an immutable SQL function;
    `leaderboard` is a view over `predictions ⋈ fixtures`. There is no `total_points`
    column to tamper with or to drift.
@@ -114,31 +115,68 @@ wrong:
 
 Odds-based, revised 06 Aug 2026 — this project's fourth scoring formula (flat →
 standings-gap → ClubElo-probability → flat → odds; see §6 for why each earlier one was
-tried and dropped, and why odds is different).
+tried and dropped, and why odds is different). Revised again the same day to split what
+was one "odds lock" timer into two: an **odds freeze** (24h before kickoff, produces the
+real scoring number) and the **prediction lock** (2h before kickoff, unchanged, when
+picks actually close) — see below for why.
 
 ```
 wrong pick                                0
-correct pick, odds locked for the fixture clamp(round(2 x odds), 4, 10)
-correct pick, no odds on file             6 for a draw, 5 for a win (flat fallback)
+correct pick, FINAL odds on file          clamp(round(2 x odds), 4, 10)
+correct pick, no odds on file at all      6 for a draw, 5 for a win (flat fallback)
 ```
 
-"No odds on file" covers two cases with the same fallback: the fixture hasn't hit its
-2-hours-before-kickoff freeze window yet, or the odds fetch genuinely failed. At odds
-2.5, a correct win scores exactly 5; at odds 3.0, a correct draw scores exactly 6 — the
-formula was deliberately anchored so it only meaningfully diverges from the old flat
-numbers where the odds say a pick was more or less obvious than a coin flip.
+**Final odds freeze 24 hours before kickoff, not 2.** Once frozen, `home_odds`/
+`draw_odds`/`away_odds` on that fixture are permanent — `set_fixture_odds()` only ever
+writes them once (guarded by `home_odds is null` in the sync job's query, not inside the
+function itself). This is what `score()` actually reads; nothing below this line affects
+a single point actually awarded.
 
-**Predictions (and odds) lock 2 hours before kickoff, not at kickoff.** This is a
-deliberate pairing, not two independent settings: if odds froze early but predictions
-stayed open until kickoff, team news/lineups landing in that window could let someone
-predict on information newer than the frozen odds reflect. `ODDS_LOCK_HOURS` in
-`index.ts` and the `interval '2 hours'` in `fixture_is_open()` (`schema.sql`) must be
-changed together — they're not read from one shared source.
+**Before that 24h freeze, the app shows an indicative preview instead of a flat
+placeholder or nothing.** `preview_home_odds`/`preview_draw_odds`/`preview_away_odds`
+hold real market odds when The Odds API already has them for a fixture that far out,
+refreshed at most every 4 hours (`PREVIEW_REFRESH_HOURS` in `index.ts`) via
+`set_fixture_preview_odds()` — which, unlike the final-odds writer, is expected to be
+called repeatedly and just overwrites each time. The frontend (`previewPointsForPick()`
+in `epl-predictor.html`) shows this value with a `~` prefix and a banner explaining it's
+an estimate; **it is never read by `score()` or anything SQL-side** — purely a display
+concern. If a fixture has neither final nor preview odds yet (too far out to be priced,
+or every fetch attempt failed), the Predict tab falls back to the same flat 5/6 numbers,
+still shown with a `~` since they're not final either.
 
-One side effect worth knowing: the `read predictions` RLS policy also keys off
-`fixture_is_open()`, so other players' picks now become visible 2 hours before kickoff
-too, not exactly at kickoff. That's fine — once picks are locked, there's no remaining
-copy-risk in showing them a little earlier.
+Why not just freeze odds immediately and skip the estimate? Two reasons, both from the
+project owner directly: bookmaker odds are least reliable days out and most reliable
+close to kickoff, so freezing too early locks in a worse number for everyone — but
+showing literally nothing (or a static number that can't possibly be right) for a
+fixture that's a week away isn't good UX either, and a live-but-unlabelled number would
+let one player who predicts early get scored on stale information relative to one who
+predicts late. The `~` marker plus the Rules-tab disclosure is the resolution: the
+number can move, but it's never presented as a promise, so nobody predicting on an
+estimate can reasonably claim they weren't told.
+
+**A subtlety worth being explicit about, because it was raised and reasoned through
+directly:** the preview refresh has to stamp `preview_synced_at` on every fixture it
+*attempts*, not just ones where The Odds API actually had a price. A fixture too far out
+to be priced yet would otherwise never get a timestamp, and would get re-queried (and
+re-fetch the whole odds API response) on every 5-minute cron tick forever instead of
+every `PREVIEW_REFRESH_HOURS` — silently blowing through the free API tier. `index.ts`
+handles this by passing every attempted fixture to `set_fixture_preview_odds()` with
+`home_odds: null` when there was no match, not just the ones that resolved to a price.
+
+**Predictions lock 2 hours before kickoff — deliberately no longer tied to the odds
+freeze.** Before 06 Aug 2026 these were the same timer, specifically so nobody could see
+final odds and still have time to change their pick using newer team news. That
+reasoning no longer applies the same way now that odds go final 24h out — by the 2h
+mark, predictions have been open against final numbers for 22 hours regardless. The 2h
+cutoff's remaining job is simpler: close the window before official starting lineups are
+typically confirmed, independent of odds. `ODDS_FREEZE_HOURS` (24) in `index.ts` and the
+`interval '2 hours'` in `fixture_is_open()` (`schema.sql`) are now two genuinely separate
+constants — don't assume changing one should change the other.
+
+One side effect worth knowing: the `read predictions` RLS policy keys off
+`fixture_is_open()` (the 2h prediction lock), so other players' picks become visible 2
+hours before kickoff — unrelated to the 24h odds freeze. That's fine — once picks are
+locked, there's no remaining copy-risk in showing them a little earlier.
 
 **Prize eligibility:** a player must have predicted at least 75% of the matches that
 have **finished so far** — not gameweeks, and not a fixed season-long total. It's a
@@ -153,9 +191,13 @@ rather than dividing by zero. `get_leaderboard()` returns `matches_predicted`,
 `epl-predictor.html` renders all four. See `schema.sql` §5 for the exact logic.
 
 `public.score(pick, home_score, away_score, home_odds, draw_odds, away_odds)` is the
-authoritative implementation. `epl-predictor.html`'s JS `pointsForCorrectPick()`
-duplicates the same formula (used both for the Predict tab's live point preview and,
-via `points()`, for Results-tab badges) — if you change one, change both.
+authoritative implementation — note it only ever takes the final `home_odds`/etc columns
+as arguments, never the preview ones. `epl-predictor.html`'s JS `pointsForCorrectPick()`
+duplicates the same formula (used by `points()` for Results-tab badges, and as the
+final-odds branch inside `previewPointsForPick()` below) — if you change one, change
+both. `previewPointsForPick()` is a separate, display-only function layered on top for
+the Predict tab's `~` preview — it reads `preview_home_odds`/etc when `pointsForCorrectPick()`
+has nothing final to work with yet, but it is never used for actual scoring anywhere.
 
 ---
 
@@ -185,18 +227,21 @@ via `points()`, for Results-tab badges) — if you change one, change both.
      -H "Authorization: Bearer <anon-key>" -H "x-sync-secret: <sync-secret>"
    ```
    Expect `{"synced":380,...}`. Free token: https://www.football-data.org/client/register.
-   Free odds key (500 credits/month — one `h2h`+`uk` call costs 1 credit, and the sync
-   only spends one when a fixture is actually due, so 500/month is comfortable headroom
-   for a 380-match season): https://the-odds-api.com/
+   Free odds key (500 credits/month — one `h2h`+`uk` call costs 1 credit regardless of
+   how many fixtures it covers; the sync only calls it when at least one fixture is due
+   for a freeze or a preview refresh, and the preview refresh self-throttles to at most
+   once every `PREVIEW_REFRESH_HOURS` — see §3): https://the-odds-api.com/
 
-   The response also includes `odds_debug` — check `matched` against `due_fixtures` the
-   first time a fixture actually enters the lock window. The team-name mapping in
-   `index.ts` (`ODDS_API_TO_FD`) was checked 06 Aug 2026 against a real Odds API response
-   compared to every distinct team name in the live `fixtures` table — all 20 clubs
-   matched exactly. That check ran before the season started (no fixture had entered the
-   lock window yet), so it's confirmed for team *names*, not yet for the live end-to-end
-   path — re-check `odds_debug` once a real fixture hits T-2h, and expect the mapping to
-   need a touch-up whenever a club is promoted/relegated between seasons.
+   The response includes `odds_debug` — check `matched` against `due_fixtures` (final
+   freeze) and `preview_matched` against `preview_attempted` (indicative preview) the
+   first time each actually runs for real. The team-name mapping in `index.ts`
+   (`ODDS_API_TO_FD`) was checked 06 Aug 2026 against a real Odds API response compared
+   to every distinct team name in the live `fixtures` table — all 20 clubs matched
+   exactly. That check ran before the season started (no fixture had entered the 24h
+   freeze window yet), so it's confirmed for team *names*, not yet for the live
+   end-to-end freeze path — re-check `odds_debug` once a real fixture hits T-24h, and
+   expect the mapping to need a touch-up whenever a club is promoted/relegated between
+   seasons.
 
    Then the reminder function (§11) — needs a Brevo **transactional API key**
    (`xkeysib-...`, from Brevo → SMTP & API → API Keys — this is a different credential
@@ -237,7 +282,8 @@ Read this before changing anything — each row is a question someone will re-as
 | **Age (not date of birth) mandatory, 18+ enforced — revised 04 Aug 2026** | Compliance requirement for a contest with real cash prizes; unchanged. Originally collected as a full DOB, changed to a plain age input at the project owner's request. Neither is verified against real ID, so this doesn't weaken the gate — both are equally self-attested. "Current age" is derived (`age_at_signup` + full years since `created_at`), never stored, so it can't go stale without a birthdate on file. | Low to relax the 18+ threshold itself; **medium** to go back to DOB, since `profiles.dob` no longer exists — would need a real migration, not a revert. |
 | **Win/Draw/Loss picks, not exact scorelines** | Simpler format, matches an earlier predictor this team built. | High — touches `predictions`' shape, `score()`, the leaderboard view, the sync function, and the prediction UI. |
 | **Odds-based scoring, flat as fallback only — revised 06 Aug 2026** | Flat (+5/+6/0) was the third formula, chosen for simplicity after two more elaborate ones were dropped — see §6. Superseded because the project owner wanted a correct pick's value to actually track how likely it was, using real bookmaker odds instead of a fixed number. Flat didn't go away: it's now the fallback for a fixture with no locked odds (either too early, or the odds fetch failed), so it's still load-bearing, just no longer the default path. | Low to change the multiplier/floor/ceiling in `score()`; **medium** to drop odds entirely and go back to pure flat, since that also means reverting `fixture_is_open()`'s lock time and `index.ts`'s odds-fetch step. |
-| **Odds lock paired with the prediction lock, both at T-2h before kickoff** | Freezing odds without also freezing predictions would let a late predictor use team news the frozen odds don't reflect. See §3 for the full reasoning. | Low-medium — `ODDS_LOCK_HOURS` in `index.ts` and the interval in `fixture_is_open()` (`schema.sql`) are two separate constants, kept in sync by hand, not a shared source. |
+| **Odds freeze (T-24h) decoupled from the prediction lock (T-2h) — revised 06 Aug 2026, same day** | Originally both were one T-2h timer. Superseded after the project owner raised a real fairness question: with only a 2-hour window, someone who predicts early sees a number that can still change, and a live-changing number specifically fails the "predicted a week out, never came back" player worst of anyone. Freezing 24h out gives a 22-hour window where the shown value is already final. | Medium — reverting means collapsing `ODDS_FREEZE_HOURS` back to match `PREDICTION_LOCK_HOURS` and dropping the preview columns/writer/display logic, several files. |
+| **Indicative `~` preview odds before the 24h freeze, not a static placeholder** | A fixture more than 24h out previously showed nothing informative. Real (if not-yet-final) market odds where available, refreshed every few hours, clearly marked as an estimate — full disclosure (the `~` plus Rules-tab text plus a banner) rather than trying to prevent the number from ever being wrong. | Low — it's additive; removing it just means falling back to the flat 5/6 shown everywhere pre-freeze. |
 | **75%-of-matches-completed-so-far eligibility, rolling — revised from an earlier fixed-38-gameweek version** | The fixed-denominator version (participation counted by gameweek, against a hardcoded 38) made "eligible" meaningless until late in the season, and didn't measure per-match commitment. Revised (04 Aug 2026) to a rolling window against matches actually finished so far. | Low — it's the join condition in one view. |
 | **`cron.sql` ships as a placeholder template, never a filled-in file** | An earlier version of this project committed a real `SYNC_SECRET` to git. Rotated once discovered; won't happen twice. | n/a — this is just correct. |
 | **Prizes/rules live in `rules-data.js`, not hardcoded in either HTML file** | Prizes are explicitly tentative (project owner, Aug 2026) and the exact rules text comes from `Terms_conditions_Plan.pdf` §1. One data file both pages load means an edit can't apply to only one of them. | Low — it's one file. |
@@ -269,7 +315,11 @@ Four formulas total, in order tried:
   a coin-flip paid the same), but the two earlier upset-bonus attempts had been dropped
   as over-engineered for a WDL format. Real odds sidestep that: no in-house probability
   model to maintain, and the bonus tracks an external, auditable number instead of one
-  this project computed itself.
+  this project computed itself. Launched same-day with odds freezing 2h before kickoff
+  (same moment predictions locked); revised again hours later, still 06 Aug 2026, to
+  freeze at 24h instead with a decoupled 2h prediction lock and a `~`-marked preview in
+  between — see §3 and the decisions log for why a 2-hour window turned out to be too
+  short and too easy to feel "cheated" by.
 
 The standings-gap and ClubElo columns/functions were deleted outright when this file
 replaced the old multi-file migration history, rather than left dormant — so reviving
@@ -300,6 +350,12 @@ Run after any fresh deployment, before trusting it with real users:
   against a manual count.
 - **Signup rejects under-18 and malformed phone numbers**, both from the app and via a
   direct `POST /auth/v1/signup` (tests the trigger, not just the client validation).
+- **Preview odds never leak into scoring** — pick a fixture with `preview_home_odds` set
+  but `home_odds` still null, confirm `score()` scores it on the flat fallback (5/6), not
+  the preview value. Preview is display-only by design; this checks that's actually true.
+- **Preview throttle actually throttles** — call `sync-fixtures?force=1` twice in a row
+  a few minutes apart, confirm `preview_synced_at` doesn't move on fixtures more than 24h
+  out on the second call (it should only update once per `PREVIEW_REFRESH_HOURS`).
 
 ---
 
@@ -309,10 +365,15 @@ Run after any fresh deployment, before trusting it with real users:
   freeze. When rescheduled with a future date they become editable again and the old
   prediction survives. To wipe them instead, add a trigger on `fixtures` that deletes
   predictions when status becomes `POSTPONED`. Undecided — pick one deliberately.
-- **Sync is the single point of failure.** `fixtures.kickoff_utc` drives both the lock
-  and the odds freeze. If the cron dies, kickoff times go stale and a match could sit
-  open past its 2-hour lock point, or even past kickoff. The app warns past 20 minutes
-  of staleness via `sync_age_seconds()`. Don't ignore the banner.
+- **Sync is the single point of failure.** `fixtures.kickoff_utc` drives the prediction
+  lock (2h), the odds freeze (24h), and indirectly the preview refresh throttle. If the
+  cron dies, kickoff times go stale and a match could sit open past its lock point, or
+  even past kickoff, and odds simply stop freezing/refreshing. The app warns past 20
+  minutes of staleness via `sync_age_seconds()`. Don't ignore the banner.
+- **A fixture with no Odds API data at all yet** (too far out to be priced, or every
+  fetch attempt has failed) shows the flat `~5`/`~6` estimate, same as the fallback for a
+  fixture with no final odds — the only difference from a real preview value is where
+  the number comes from, the `~` treatment is identical either way.
 - **No penalty shootouts** on football-data.org's free tier. Irrelevant for league play.
 - **Supabase pauses idle free projects** after roughly a week. The cron counts as
   activity.
