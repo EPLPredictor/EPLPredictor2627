@@ -34,17 +34,17 @@ const REDFOOTY_RULES = {
   prizes: [
     {
       place: "1st",
-      title: "Jersey of your choice + Dinner for Two",
-      detail: "An original club jersey — any player, any season — plus dinner for two on Redfooty. Arranged within 7 days of the final gameweek.",
+      title: "Jersey of your choice",
+      detail: "An original club jersey — any player, any season. Arranged within 7 days of the final gameweek.",
     },
     {
       place: "2nd",
-      title: "₹5,000 cash + Dinner for Two",
-      detail: "Cash transferred via UPI/bank transfer, plus dinner for two, within 7 days of the final gameweek.",
+      title: "₹4,000 cash",
+      detail: "Cash transferred via UPI/bank transfer within 7 days of the final gameweek.",
     },
     {
       place: "3rd",
-      title: "₹5,000 cash",
+      title: "₹2,500 cash",
       detail: "Cash transferred via UPI/bank transfer within 7 days of the final gameweek.",
     },
   ],
