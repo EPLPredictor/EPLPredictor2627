@@ -43,9 +43,15 @@ select cron.schedule(
 
 
 -- ------------------------------------------------------------
--- Reminder emails — once daily. Timing is arbitrary (09:00 UTC here,
--- ~2:30pm IST) - move it wherever suits; it's not tied to kickoff
--- times, see README §11.
+-- Reminder emails — once daily at 18:25 UTC (23:55 IST), 5 minutes
+-- before Brevo's free-plan daily send quota resets at midnight IST
+-- (confirmed with Brevo support 13 Aug 2026 — reset follows the
+-- account's configured timezone, Asia/Kolkata). send-reminders.ts
+-- reads Brevo's live remaining quota at call time and only sends that
+-- many, so OTP emails (same Brevo account/quota, different send path)
+-- always get first claim on the day's allowance. If the timezone
+-- offset from UTC ever needs recalculating, IST has no DST, so this
+-- schedule doesn't drift with seasons.
 -- ------------------------------------------------------------
 
 select cron.unschedule('send-reminders')
@@ -53,7 +59,7 @@ where exists (select 1 from cron.job where jobname = 'send-reminders');
 
 select cron.schedule(
   'send-reminders',
-  '0 9 * * *',
+  '25 18 * * *',
   $$
   select net.http_post(
     url     := 'https://<project-ref>.supabase.co/functions/v1/send-reminders',
