@@ -75,6 +75,36 @@ select cron.schedule(
 
 
 -- ------------------------------------------------------------
+-- Auto-predict — every 3 hours. Not once daily: a gameweek's fixtures
+-- kick off across several different days/times, each locking
+-- independently 2 hours before its own kickoff, so this needs to run
+-- often enough that no single fixture's lock sneaks up on it. It only
+-- ever acts on fixtures whose FINAL odds are already frozen (see
+-- auto-predict.ts header), so running this more often than odds
+-- actually change is harmless — most runs just find nothing new to do.
+-- ------------------------------------------------------------
+
+select cron.unschedule('auto-predict')
+where exists (select 1 from cron.job where jobname = 'auto-predict');
+
+select cron.schedule(
+  'auto-predict',
+  '0 */3 * * *',
+  $$
+  select net.http_post(
+    url     := 'https://<project-ref>.supabase.co/functions/v1/auto-predict',
+    headers := jsonb_build_object(
+                 'Content-Type',        'application/json',
+                 'Authorization',       'Bearer <anon-key>',
+                 'x-autopredict-secret', '<autopredict-secret>'
+               ),
+    timeout_milliseconds := 30000
+  );
+  $$
+);
+
+
+-- ------------------------------------------------------------
 -- Checks
 -- ------------------------------------------------------------
 
@@ -101,5 +131,8 @@ select cron.schedule(
 -- How many reminders have gone out, and for which gameweek?
 --   select matchday, count(*) from public.reminder_log group by matchday order by 1;
 
+-- How many auto picks exist, and for whom?
+--   select user_id, count(*) from public.predictions where source = 'auto' group by user_id;
+
 -- Pause a job without deleting it:
---   update cron.job set active = false where jobname = 'sync-fixtures';  -- or 'send-reminders'
+--   update cron.job set active = false where jobname = 'sync-fixtures';  -- or 'send-reminders', or 'auto-predict'

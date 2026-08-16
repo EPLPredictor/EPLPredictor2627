@@ -44,6 +44,18 @@
   force = true
 
 [[redirects]]
+  from = "/auto-predict.ts"
+  to = "/Landing_Page.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/admin-autopredict.ts"
+  to = "/Landing_Page.html"
+  status = 404
+  force = true
+
+[[redirects]]
   from = "/README.md"
   to = "/Landing_Page.html"
   status = 404

@@ -70,6 +70,19 @@ alter table public.profiles
 alter table public.profiles
   add constraint profiles_age_18plus check (age_at_signup >= 18 and age_at_signup < 120);
 
+-- Auto-predict opt-in (added Aug 2026) — a handful of real, consenting users
+-- who can't log in daily get their picks filled in by a bot instead. Off by
+-- default for everyone; only flipped on explicitly per user_id, never by a
+-- bulk/filtered update. risk_tier shapes how that bot weighs favorite vs
+-- underdog picks against the user's leaderboard standing — see
+-- app/auto-predict.ts. Nullable because it's meaningless for anyone with
+-- auto_predict_enabled = false.
+alter table public.profiles
+  add column if not exists auto_predict_enabled boolean not null default false;
+alter table public.profiles
+  add column if not exists risk_tier text
+    check (risk_tier in ('conservative', 'balanced', 'aggressive'));
+
 alter table public.profiles enable row level security;
 
 drop policy if exists "read own profile" on public.profiles;
@@ -266,6 +279,18 @@ create table if not exists public.predictions (
   updated_at timestamptz not null default now(),
   primary key (user_id, fixture_id)
 );
+
+-- source/auto_reasoning (added Aug 2026, alongside profiles.auto_predict_enabled
+-- above) — every auto-predict write is tagged and carries what produced it
+-- (odds snapshot, leaderboard rank, risk tier at write time) so a bot pick is
+-- always auditable and distinguishable from one the player entered themselves.
+-- auto-predict.ts only ever INSERTs a missing row (onConflict do-nothing) —
+-- it must never flip an existing 'manual' row to 'auto'.
+alter table public.predictions
+  add column if not exists source text not null default 'manual'
+    check (source in ('manual', 'auto'));
+alter table public.predictions
+  add column if not exists auto_reasoning jsonb;
 
 create index if not exists predictions_fixture_idx on public.predictions (fixture_id);
 
