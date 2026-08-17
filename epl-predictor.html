@@ -438,7 +438,13 @@ async function savePrediction(fid, pick) {
 
   setBusy(true);
   const { error } = await sb.from("predictions").upsert({
-    user_id: S.session.user.id, fixture_id: fid, pick
+    // source/auto_reasoning explicit here (not just left to the column
+    // default): upsert only updates columns present in the payload, so
+    // without these, overwriting a bot-written pick would keep it
+    // mislabeled source='auto' forever even though it's now the
+    // player's own choice — see auto-predict.ts.
+    user_id: S.session.user.id, fixture_id: fid, pick,
+    source: "manual", auto_reasoning: null
   }, { onConflict: "user_id,fixture_id" });
   setBusy(false);
 
