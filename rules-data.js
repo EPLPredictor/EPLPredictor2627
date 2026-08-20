@@ -39,13 +39,13 @@ const REDFOOTY_RULES = {
     },
     {
       place: "2nd",
-      title: "₹4,000 cash",
-      detail: "Cash transferred via UPI/bank transfer within 7 days of the final gameweek.",
+      title: "Official match football",
+      detail: "Arranged within 7 days of the final gameweek.",
     },
     {
       place: "3rd",
-      title: "₹2,500 cash",
-      detail: "Cash transferred via UPI/bank transfer within 7 days of the final gameweek.",
+      title: "Club scarf",
+      detail: "Arranged within 7 days of the final gameweek.",
     },
   ],
 
