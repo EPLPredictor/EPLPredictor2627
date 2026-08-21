@@ -558,7 +558,13 @@ as $$
   select p.id, u.email, p.full_name
   from public.profiles p
   join auth.users u on u.id = p.id
-  where not exists (
+  where not p.auto_predict_enabled
+  -- auto_predict_enabled added Aug 2026, after this function was first
+  -- written — opted-in users never need this nudge (that's the whole
+  -- point of opting in), and reminding them "you haven't predicted yet"
+  -- right before the bot fills it in for them is actively confusing, not
+  -- just redundant.
+  and not exists (
     select 1 from public.predictions pr
     join public.fixtures fx on fx.id = pr.fixture_id
     where pr.user_id = p.id and fx.matchday = target_matchday
